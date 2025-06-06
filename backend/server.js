@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
+import * as Sentry from '@sentry/node';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -29,8 +30,18 @@ const __dirname = dirname(__filename);
 // Load environment variables
 dotenv.config();
 
+// Initialize Sentry
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  environment: process.env.NODE_ENV || 'development',
+  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+});
+
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Sentry request handler must be the first middleware
+app.use(Sentry.Handlers.requestHandler());
 
 // Trust proxy for rate limiting
 app.set('trust proxy', 1);
@@ -75,6 +86,11 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Sentry test endpoint
+app.get('/debug-sentry', (req, res) => {
+  throw new Error('Sentry backend test error - This is intentional for testing purposes');
+});
+
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/chat', authMiddleware, chatRoutes);
@@ -88,6 +104,9 @@ app.use('*', (req, res) => {
     message: 'The requested resource was not found on this server.',
   });
 });
+
+// Sentry error handler must be before any other error middleware
+app.use(Sentry.Handlers.errorHandler());
 
 // Global error handler
 app.use(errorHandler);
@@ -113,9 +132,11 @@ const startServer = async () => {
       logger.info(`🚀 Server running on port ${PORT}`);
       logger.info(`📱 Environment: ${process.env.NODE_ENV || 'development'}`);
       logger.info(`🌍 Health check: http://localhost:${PORT}/health`);
+      logger.info(`🐛 Sentry test: http://localhost:${PORT}/debug-sentry`);
     });
   } catch (error) {
     logger.error('Failed to start server:', error);
+    Sentry.captureException(error);
     process.exit(1);
   }
 };
