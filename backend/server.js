@@ -1,3 +1,6 @@
+// Import Sentry instrumentation first
+require('./instrument.js');
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -29,13 +32,6 @@ const __dirname = dirname(__filename);
 
 // Load environment variables
 dotenv.config();
-
-// Initialize Sentry
-Sentry.init({
-  dsn: process.env.SENTRY_DSN,
-  environment: process.env.NODE_ENV || 'development',
-  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
-});
 
 const app = express();
 const PORT = process.env.PORT || 5000;
