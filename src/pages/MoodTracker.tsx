@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Heart, TrendingUp, Calendar, BarChart3, Smile, Meh, Frown } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { Heart, TrendingUp, Calendar, BarChart3, Smile, Meh, Frown, Plus, CheckCircle } from 'lucide-react';
 import Button from '../components/Button';
 
 interface MoodEntry {
@@ -10,9 +11,20 @@ interface MoodEntry {
 }
 
 const MoodTracker: React.FC = () => {
-  const [currentMood, setCurrentMood] = useState<number>(5);
-  const [notes, setNotes] = useState('');
-  const [selectedFactors, setSelectedFactors] = useState<string[]>([]);
+  const location = useLocation();
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+
+  // Check for success message from navigation state
+  useEffect(() => {
+    if (location.state?.message) {
+      setShowSuccessMessage(true);
+      // Clear the message after 5 seconds
+      const timer = setTimeout(() => {
+        setShowSuccessMessage(false);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [location.state]);
 
   const moodData: MoodEntry[] = [
     { date: '2024-01-15', mood: 8, notes: 'Great day!', factors: ['exercise', 'good-sleep'] },
@@ -44,111 +56,47 @@ const MoodTracker: React.FC = () => {
     return 'bg-red-500';
   };
 
-  const toggleFactor = (factorId: string) => {
-    setSelectedFactors(prev =>
-      prev.includes(factorId)
-        ? prev.filter(id => id !== factorId)
-        : [...prev, factorId]
-    );
-  };
-
   const averageMood = moodData.reduce((sum, entry) => sum + entry.mood, 0) / moodData.length;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-secondary-50 pt-8 pb-12">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Success Message */}
+        {showSuccessMessage && (
+          <div className="mb-6 bg-green-50 border border-green-200 rounded-xl p-4 flex items-center space-x-3 animate-slide-up">
+            <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+            <p className="text-green-800 font-medium">{location.state?.message}</p>
+          </div>
+        )}
+
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-display font-bold text-neutral-900 mb-2">
-            Mood Tracker
-          </h1>
-          <p className="text-neutral-600">Track your daily emotions and identify patterns</p>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+            <div>
+              <h1 className="text-3xl font-display font-bold text-neutral-900 mb-2">
+                Mood Tracker
+              </h1>
+              <p className="text-neutral-600">Track your daily emotions and identify patterns</p>
+            </div>
+            <div className="mt-4 md:mt-0">
+              <Link to="/mood/check-in">
+                <Button className="min-w-[160px]">
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Check-In
+                </Button>
+              </Link>
+            </div>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Current Mood Entry */}
+          {/* Mood History */}
           <div className="lg:col-span-2">
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg mb-6">
-              <h2 className="text-xl font-semibold text-neutral-900 mb-4">How are you feeling today?</h2>
-              
-              {/* Mood Scale */}
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-sm text-neutral-600">Very Bad</span>
-                  <span className="text-sm text-neutral-600">Excellent</span>
-                </div>
-                <div className="relative">
-                  <input
-                    type="range"
-                    min="1"
-                    max="10"
-                    value={currentMood}
-                    onChange={(e) => setCurrentMood(parseInt(e.target.value))}
-                    className="w-full h-2 bg-neutral-200 rounded-lg appearance-none cursor-pointer slider"
-                  />
-                  <div className="flex justify-between mt-2 text-xs text-neutral-400">
-                    {[1,2,3,4,5,6,7,8,9,10].map(num => (
-                      <span key={num}>{num}</span>
-                    ))}
-                  </div>
-                </div>
-                <div className="text-center mt-4">
-                  <div className="inline-flex items-center space-x-2">
-                    {getMoodIcon(currentMood)}
-                    <span className="text-2xl font-bold text-neutral-900">{currentMood}/10</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Factors */}
-              <div className="mb-6">
-                <h3 className="text-lg font-medium text-neutral-900 mb-3">What's affecting your mood?</h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {factors.map((factor) => (
-                    <button
-                      key={factor.id}
-                      onClick={() => toggleFactor(factor.id)}
-                      className={`p-3 rounded-lg border-2 transition-all ${
-                        selectedFactors.includes(factor.id)
-                          ? 'border-primary-500 bg-primary-50'
-                          : 'border-neutral-200 hover:border-neutral-300'
-                      }`}
-                    >
-                      <div className="flex items-center space-x-2">
-                        <div className={`w-3 h-3 rounded-full ${factor.color}`}></div>
-                        <span className="text-sm font-medium">{factor.label}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Notes */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-neutral-700 mb-2">
-                  Additional notes (optional)
-                </label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Anything specific you'd like to remember about today?"
-                  rows={3}
-                  className="w-full p-3 border border-neutral-300 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                />
-              </div>
-
-              <Button className="w-full">
-                <Heart className="h-4 w-4 mr-2" />
-                Save Today's Mood
-              </Button>
-            </div>
-
-            {/* Mood History */}
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg">
-              <h3 className="text-xl font-semibold text-neutral-900 mb-4">Recent Entries</h3>
+              <h3 className="text-xl font-semibold text-neutral-900 mb-6">Recent Entries</h3>
               <div className="space-y-4">
                 {moodData.map((entry, index) => (
-                  <div key={index} className="flex items-center justify-between p-4 bg-neutral-50 rounded-xl">
+                  <div key={index} className="flex items-center justify-between p-4 bg-neutral-50 rounded-xl hover:bg-neutral-100 transition-colors">
                     <div className="flex items-center space-x-4">
                       <div className="flex items-center space-x-2">
                         <Calendar className="h-4 w-4 text-neutral-400" />
@@ -160,6 +108,9 @@ const MoodTracker: React.FC = () => {
                         {getMoodIcon(entry.mood)}
                         <span className="font-medium">{entry.mood}/10</span>
                       </div>
+                      {entry.notes && (
+                        <span className="text-sm text-neutral-500 italic">"{entry.notes}"</span>
+                      )}
                     </div>
                     <div className="flex items-center space-x-2">
                       {entry.factors.map((factorId, factorIndex) => {
