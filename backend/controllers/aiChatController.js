@@ -50,6 +50,7 @@ const aiChatController = {
         role: 'user',
         content: message,
         timestamp: new Date().toISOString(),
+        emotion: await analyzeEmotion(message), // Add emotion analysis
       };
       conversation.messages.push(userMessage);
 
@@ -115,6 +116,7 @@ Remember: You are a supportive companion, not a replacement for professional the
           id: userMessage.id,
           content: userMessage.content,
           timestamp: userMessage.timestamp,
+          emotion: userMessage.emotion,
         },
         aiMessage: {
           id: aiMessage.id,
@@ -174,6 +176,7 @@ Remember: You are a supportive companion, not a replacement for professional the
             role: msg.role,
             content: msg.content,
             timestamp: msg.timestamp,
+            emotion: msg.emotion,
           })),
         },
       });
@@ -242,6 +245,178 @@ Remember: You are a supportive companion, not a replacement for professional the
       });
     }
   },
+
+  // Summarize conversation
+  summarizeConversation: async (req, res) => {
+    try {
+      const { conversationId } = req.body;
+      const userId = req.user.id;
+
+      const conversation = conversations.find(
+        c => c.id === conversationId && c.userId === userId
+      );
+
+      if (!conversation) {
+        return res.status(404).json({
+          error: 'Not Found',
+          message: 'Conversation not found',
+        });
+      }
+
+      // Prepare conversation for summarization
+      const conversationText = conversation.messages
+        .map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
+        .join('\n\n');
+
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a professional therapist creating a session summary. Summarize the key themes, emotions, insights, and progress discussed in this conversation. Keep it professional, empathetic, and focused on therapeutic value.',
+          },
+          {
+            role: 'user',
+            content: `Please summarize this therapy conversation:\n\n${conversationText}`,
+          },
+        ],
+        max_tokens: 300,
+        temperature: 0.3,
+      });
+
+      const summary = completion.choices[0]?.message?.content;
+
+      res.json({
+        summary,
+        conversationId,
+        messageCount: conversation.messages.length,
+        createdAt: conversation.createdAt,
+      });
+    } catch (error) {
+      logger.error('Summarize conversation error:', error);
+      res.status(500).json({
+        error: 'Internal Server Error',
+        message: 'Failed to summarize conversation',
+      });
+    }
+  },
+
+  // Get chat analytics
+  getAnalytics: async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const userConversations = conversations.filter(c => c.userId === userId);
+
+      // Calculate analytics
+      const totalMessages = userConversations.reduce((sum, conv) => sum + conv.messages.length, 0);
+      const totalConversations = userConversations.length;
+      const averageMessagesPerConversation = totalConversations > 0 ? totalMessages / totalConversations : 0;
+
+      // Emotion analysis
+      const emotions = {};
+      const moodTrends = [];
+      
+      userConversations.forEach(conv => {
+        conv.messages.forEach(msg => {
+          if (msg.role === 'user' && msg.emotion) {
+            emotions[msg.emotion] = (emotions[msg.emotion] || 0) + 1;
+            moodTrends.push({
+              date: msg.timestamp.split('T')[0],
+              emotion: msg.emotion,
+            });
+          }
+        });
+      });
+
+      // Word count analysis
+      const totalWords = userConversations.reduce((sum, conv) => {
+        return sum + conv.messages
+          .filter(msg => msg.role === 'user')
+          .reduce((wordSum, msg) => wordSum + msg.content.split(' ').length, 0);
+      }, 0);
+
+      res.json({
+        totalConversations,
+        totalMessages,
+        totalWords,
+        averageMessagesPerConversation: Math.round(averageMessagesPerConversation * 10) / 10,
+        emotionDistribution: emotions,
+        moodTrends: moodTrends.slice(-30), // Last 30 entries
+        activeTimeAnalysis: {
+          mostActiveHour: getMostActiveHour(userConversations),
+          conversationsThisWeek: getConversationsThisWeek(userConversations),
+          conversationsThisMonth: getConversationsThisMonth(userConversations),
+        },
+      });
+    } catch (error) {
+      logger.error('Get analytics error:', error);
+      res.status(500).json({
+        error: 'Internal Server Error',
+        message: 'Failed to get analytics',
+      });
+    }
+  },
+};
+
+// Helper function to analyze emotion using OpenAI
+const analyzeEmotion = async (message) => {
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      messages: [
+        {
+          role: 'system',
+          content: 'Analyze the emotion in this message and respond with only one word: happy, sad, anxious, angry, neutral, excited, frustrated, or hopeful.',
+        },
+        {
+          role: 'user',
+          content: message,
+        },
+      ],
+      max_tokens: 10,
+      temperature: 0.1,
+    });
+
+    return completion.choices[0]?.message?.content?.toLowerCase().trim() || 'neutral';
+  } catch (error) {
+    logger.error('Emotion analysis error:', error);
+    return 'neutral';
+  }
+};
+
+// Helper functions for analytics
+const getMostActiveHour = (conversations) => {
+  const hourCounts = {};
+  conversations.forEach(conv => {
+    conv.messages.forEach(msg => {
+      const hour = new Date(msg.timestamp).getHours();
+      hourCounts[hour] = (hourCounts[hour] || 0) + 1;
+    });
+  });
+  
+  const mostActiveHour = Object.keys(hourCounts).reduce((a, b) => 
+    hourCounts[a] > hourCounts[b] ? a : b, '0'
+  );
+  
+  return parseInt(mostActiveHour);
+};
+
+const getConversationsThisWeek = (conversations) => {
+  const oneWeekAgo = new Date();
+  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+  
+  return conversations.filter(conv => 
+    new Date(conv.createdAt) >= oneWeekAgo
+  ).length;
+};
+
+const getConversationsThisMonth = (conversations) => {
+  const oneMonthAgo = new Date();
+  oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+  
+  return conversations.filter(conv => 
+    new Date(conv.createdAt) >= oneMonthAgo
+  ).length;
 };
 
 export { aiChatController };
