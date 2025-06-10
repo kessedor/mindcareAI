@@ -54,41 +54,67 @@ const aiChatController = {
       };
       conversation.messages.push(userMessage);
 
-      // Prepare messages for OpenAI (include system prompt and conversation history)
+      // Prepare messages for OpenAI - Get last 10 messages for context
       const systemPrompt = {
         role: 'system',
-        content: `You are MindCareAI, a compassionate and professional AI mental health assistant. Your role is to:
+        content: `You are MindCareAI, a compassionate and trauma-informed AI mental health assistant. Your role is to:
 
-1. Provide empathetic, supportive responses to users seeking mental health guidance
-2. Use evidence-based therapeutic techniques when appropriate (CBT, mindfulness, etc.)
+1. Provide empathetic, supportive responses that are contextually relevant to the conversation
+2. Use evidence-based therapeutic techniques (CBT, mindfulness, validation) when appropriate
 3. Encourage users to seek professional help for serious concerns
-4. Never diagnose mental health conditions or prescribe medications
+4. NEVER diagnose mental health conditions or prescribe medications
 5. Maintain appropriate boundaries while being warm and understanding
-6. Ask thoughtful follow-up questions to help users explore their feelings
+6. Ask thoughtful, varied follow-up questions that build on previous responses
 7. Provide practical coping strategies and self-care suggestions
+8. AVOID repetitive responses - each response should be unique and contextually appropriate
 
-Guidelines:
+Guidelines for responses:
 - Keep responses concise but meaningful (under 300 words)
-- Use a warm, professional tone
-- Validate the user's feelings
-- Offer hope and encouragement
-- If someone mentions self-harm or suicide, immediately encourage them to contact emergency services or a crisis hotline
+- Use a warm, professional tone that varies based on the user's emotional state
+- Validate the user's feelings and experiences
+- Offer hope and encouragement appropriately
+- If someone mentions self-harm or suicide, immediately encourage them to contact emergency services
+- Reference previous parts of the conversation when relevant
+- Adapt your communication style to match the severity and nature of the user's concerns
 
-Remember: You are a supportive companion, not a replacement for professional therapy.`
+CRITICAL: Avoid generic responses like "Tell me more about what's been on your mind lately" - instead, respond specifically to what the user has shared and build on the conversation naturally.
+
+Remember: You are a supportive companion providing personalized guidance, not a replacement for professional therapy.`
       };
 
-      // Get recent conversation history (last 10 messages to manage token usage)
-      const recentMessages = conversation.messages.slice(-10);
-      const messagesForAI = [systemPrompt, ...recentMessages];
+      // Get conversation history (last 8 messages to maintain context while managing tokens)
+      const recentMessages = conversation.messages.slice(-8);
+      
+      // Convert to OpenAI format
+      const conversationHistory = recentMessages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
 
-      // Call OpenAI API
+      // Prepare full message array for OpenAI
+      const messagesForAI = [systemPrompt, ...conversationHistory];
+
+      // Log the payload being sent to OpenAI for debugging
+      logger.info('OpenAI API Payload:', {
+        model: process.env.OPENAI_MODEL || 'gpt-4',
+        messages: messagesForAI,
+        max_tokens: parseInt(process.env.OPENAI_MAX_TOKENS) || 500,
+        temperature: 0.7,
+        presence_penalty: 0.5,
+        frequency_penalty: 0.5,
+        conversationId: conversation.id,
+        messageCount: conversation.messages.length
+      });
+
+      // Call OpenAI API with improved parameters
       const completion = await openai.chat.completions.create({
         model: process.env.OPENAI_MODEL || 'gpt-4',
         messages: messagesForAI,
         max_tokens: parseInt(process.env.OPENAI_MAX_TOKENS) || 500,
         temperature: 0.7,
-        presence_penalty: 0.1,
-        frequency_penalty: 0.1,
+        presence_penalty: 0.5,  // Encourage new topics
+        frequency_penalty: 0.5, // Reduce repetition
+        user: userId, // For OpenAI usage tracking
       });
 
       const aiResponse = completion.choices[0]?.message?.content;
@@ -107,7 +133,13 @@ Remember: You are a supportive companion, not a replacement for professional the
       conversation.messages.push(aiMessage);
       conversation.updatedAt = new Date().toISOString();
 
-      logger.info(`AI chat message processed for user ${userId}`);
+      // Log successful response
+      logger.info(`AI chat message processed for user ${userId}`, {
+        conversationId: conversation.id,
+        messageCount: conversation.messages.length,
+        userEmotion: userMessage.emotion,
+        responseLength: aiResponse.length
+      });
 
       res.json({
         message: 'Message sent successfully',
