@@ -20,7 +20,9 @@ const aiChatController = {
         userId,
         message: message.substring(0, 100),
         conversationId,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        hasOpenAIKey: !!process.env.OPENAI_API_KEY,
+        openAIKeyLength: process.env.OPENAI_API_KEY?.length || 0
       });
 
       // Validate input
@@ -35,6 +37,15 @@ const aiChatController = {
         return res.status(400).json({
           error: 'Bad Request',
           message: 'Message too long. Please keep it under 2000 characters.',
+        });
+      }
+
+      // Check if OpenAI API key is configured
+      if (!process.env.OPENAI_API_KEY) {
+        logger.error('OpenAI API key is not configured!');
+        return res.status(500).json({
+          error: 'Configuration Error',
+          message: 'AI service is not properly configured. Please check server configuration.',
         });
       }
 
@@ -73,36 +84,44 @@ const aiChatController = {
         content: userMessage.content.substring(0, 100)
       });
 
-      // Prepare messages for OpenAI - Get last 10 messages for context
+      // Prepare messages for OpenAI - Get last 8 messages for context
       const systemPrompt = {
         role: 'system',
-        content: `You are MindCareAI, a compassionate and trauma-informed AI mental health assistant. Your role is to:
+        content: `You are MindCareAI, a compassionate and trauma-informed AI mental health assistant. 
 
-1. Provide empathetic, supportive responses that are contextually relevant to the conversation
-2. Use evidence-based therapeutic techniques (CBT, mindfulness, validation) when appropriate
-3. Encourage users to seek professional help for serious concerns
-4. NEVER diagnose mental health conditions or prescribe medications
-5. Maintain appropriate boundaries while being warm and understanding
-6. Ask thoughtful, varied follow-up questions that build on previous responses
-7. Provide practical coping strategies and self-care suggestions
-8. AVOID repetitive responses - each response should be unique and contextually appropriate
+CRITICAL INSTRUCTIONS:
+- You MUST respond uniquely to each user message
+- NEVER use generic responses like "Tell me more about what's been on your mind lately"
+- Respond specifically to what the user just shared
+- Reference previous conversation when relevant
+- Adapt your tone to match the user's emotional state
 
-Guidelines for responses:
-- Keep responses concise but meaningful (under 300 words)
-- Use a warm, professional tone that varies based on the user's emotional state
-- Validate the user's feelings and experiences
-- Offer hope and encouragement appropriately
-- If someone mentions self-harm or suicide, immediately encourage them to contact emergency services
-- Reference previous parts of the conversation when relevant
-- Adapt your communication style to match the severity and nature of the user's concerns
+Current user message: "${message}"
 
-CRITICAL: Avoid generic responses like "Tell me more about what's been on your mind lately" - instead, respond specifically to what the user has shared and build on the conversation naturally.
+Your role:
+1. Provide empathetic, contextually relevant responses
+2. Use evidence-based therapeutic techniques (CBT, mindfulness, validation)
+3. Encourage professional help for serious concerns
+4. NEVER diagnose or prescribe medications
+5. Ask thoughtful, varied follow-up questions
+6. Provide practical coping strategies
+
+Response guidelines:
+- Keep responses under 300 words
+- Use warm, professional tone that varies based on user's state
+- Validate feelings and experiences
+- Offer appropriate hope and encouragement
+- For self-harm mentions, immediately suggest emergency services
+- Build on conversation naturally
+
+AVOID: Generic responses, repetitive questions, clinical jargon
+FOCUS: Personalized, empathetic, contextually appropriate responses
 
 Remember: You are a supportive companion providing personalized guidance, not a replacement for professional therapy.`
       };
 
-      // Get conversation history (last 8 messages to maintain context while managing tokens)
-      const recentMessages = conversation.messages.slice(-8);
+      // Get conversation history (last 6 messages to maintain context)
+      const recentMessages = conversation.messages.slice(-6);
       
       // Convert to OpenAI format
       const conversationHistory = recentMessages.map(msg => ({
@@ -118,9 +137,9 @@ Remember: You are a supportive companion providing personalized guidance, not a 
         model: process.env.OPENAI_MODEL || 'gpt-4',
         messages: messagesForAI,
         max_tokens: parseInt(process.env.OPENAI_MAX_TOKENS) || 500,
-        temperature: 0.7,
-        presence_penalty: 0.5,
-        frequency_penalty: 0.5,
+        temperature: 0.8,
+        presence_penalty: 0.6,
+        frequency_penalty: 0.6,
         user: userId,
       };
 
@@ -133,7 +152,7 @@ Remember: You are a supportive companion providing personalized guidance, not a 
         temperature: openaiPayload.temperature,
         presence_penalty: openaiPayload.presence_penalty,
         frequency_penalty: openaiPayload.frequency_penalty,
-        fullPayload: JSON.stringify(openaiPayload, null, 2)
+        fullMessages: messagesForAI.map(m => ({ role: m.role, content: m.content.substring(0, 100) + '...' }))
       });
 
       // Call OpenAI API with improved parameters
@@ -144,7 +163,7 @@ Remember: You are a supportive companion providing personalized guidance, not a 
         choices: completion.choices?.length || 0,
         finishReason: completion.choices?.[0]?.finish_reason,
         usage: completion.usage,
-        fullResponse: JSON.stringify(completion, null, 2)
+        responseContent: completion.choices?.[0]?.message?.content?.substring(0, 200) + '...'
       });
 
       const aiResponse = completion.choices[0]?.message?.content;
@@ -157,7 +176,7 @@ Remember: You are a supportive companion providing personalized guidance, not a 
       logger.info('=== AI RESPONSE EXTRACTED ===', {
         responseLength: aiResponse.length,
         responsePreview: aiResponse.substring(0, 200),
-        fullResponse: aiResponse
+        isGeneric: aiResponse.includes('Tell me more about what\'s been on your mind lately')
       });
 
       // Add AI response to conversation
@@ -176,21 +195,7 @@ Remember: You are a supportive companion providing personalized guidance, not a 
         messageCount: conversation.messages.length,
         userEmotion: userMessage.emotion,
         aiResponseLength: aiResponse.length,
-        finalResponse: {
-          message: 'Message sent successfully',
-          conversationId: conversation.id,
-          userMessage: {
-            id: userMessage.id,
-            content: userMessage.content,
-            timestamp: userMessage.timestamp,
-            emotion: userMessage.emotion,
-          },
-          aiMessage: {
-            id: aiMessage.id,
-            content: aiMessage.content,
-            timestamp: aiMessage.timestamp,
-          },
-        }
+        responsePreview: aiResponse.substring(0, 100)
       });
 
       res.json({
@@ -213,7 +218,8 @@ Remember: You are a supportive companion providing personalized guidance, not a 
         error: error.message,
         stack: error.stack,
         openaiError: error.response?.data,
-        statusCode: error.response?.status
+        statusCode: error.response?.status,
+        isOpenAIError: error.message?.includes('OpenAI')
       });
 
       // Handle specific OpenAI errors
@@ -231,11 +237,30 @@ Remember: You are a supportive companion providing personalized guidance, not a 
         });
       }
 
+      // Return a more specific error message
       res.status(500).json({
         error: 'Internal Server Error',
         message: 'Failed to process your message. Please try again.',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     }
+  },
+
+  // Test endpoint to verify backend is working
+  test: async (req, res) => {
+    logger.info('=== TEST ENDPOINT CALLED ===', {
+      timestamp: new Date().toISOString(),
+      user: req.user,
+      hasOpenAIKey: !!process.env.OPENAI_API_KEY
+    });
+
+    res.json({
+      message: 'Backend is working!',
+      timestamp: new Date().toISOString(),
+      user: req.user,
+      openaiConfigured: !!process.env.OPENAI_API_KEY,
+      environment: process.env.NODE_ENV
+    });
   },
 
   // Get conversation history
@@ -450,6 +475,10 @@ Remember: You are a supportive companion providing personalized guidance, not a 
 // Helper function to analyze emotion using OpenAI
 const analyzeEmotion = async (message) => {
   try {
+    if (!process.env.OPENAI_API_KEY) {
+      return 'neutral';
+    }
+
     const completion = await openai.chat.completions.create({
       model: 'gpt-3.5-turbo',
       messages: [

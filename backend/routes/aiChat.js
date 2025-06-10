@@ -18,6 +18,9 @@ const validateChatMessage = [
   handleValidationErrors,
 ];
 
+// Test endpoint to verify backend is working
+router.get('/test', aiChatController.test);
+
 // AI Chat routes
 router.post('/message', validateChatMessage, aiChatController.sendMessage);
 router.get('/conversations', aiChatController.getConversations);
