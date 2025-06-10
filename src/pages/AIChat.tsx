@@ -2,7 +2,31 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, MessageCircle, Trash2, Plus, FileText, Calendar, BarChart3 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Button from '../components/Button';
-import { chatAPI, ChatMessage } from '../api/chatAPI';
+import api from '../utils/api';
+
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+  emotion?: string;
+}
+
+interface SendMessageResponse {
+  message: string;
+  conversationId: string;
+  userMessage: {
+    id: string;
+    content: string;
+    timestamp: string;
+    emotion?: string;
+  };
+  aiMessage: {
+    id: string;
+    content: string;
+    timestamp: string;
+  };
+}
 
 const AIChat: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -51,7 +75,12 @@ const AIChat: React.FC = () => {
     setError(null);
 
     try {
-      const response = await chatAPI.sendMessage(inputValue.trim(), conversationId || undefined);
+      // Call the correct AI chat endpoint
+      const response = await api.post('/ai-chat/message', {
+        message: inputValue.trim(),
+        conversationId: conversationId || undefined
+      });
+
       const { conversationId: newConversationId, userMessage: confirmedUserMessage, aiMessage } = response.data;
 
       // Update conversation ID if this is the first message
@@ -115,7 +144,7 @@ const AIChat: React.FC = () => {
   const clearConversation = async () => {
     if (conversationId) {
       try {
-        await chatAPI.deleteConversation(conversationId);
+        await api.delete(`/ai-chat/conversations/${conversationId}`);
       } catch (error) {
         console.error('Failed to delete conversation:', error);
       }
@@ -128,7 +157,7 @@ const AIChat: React.FC = () => {
 
     setIsSummarizing(true);
     try {
-      const response = await chatAPI.summarizeConversation(conversationId);
+      const response = await api.post('/ai-chat/summarize', { conversationId });
       setSummary(response.data.summary);
     } catch (error) {
       console.error('Failed to summarize conversation:', error);
