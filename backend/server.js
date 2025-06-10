@@ -22,6 +22,7 @@ import authRoutes from './routes/auth.js';
 import chatRoutes from './routes/chat.js';
 import journalRoutes from './routes/journal.js';
 import moodRoutes from './routes/mood.js';
+import aiChatRoutes from './routes/aiChat.js';
 
 // Import database configuration
 import { connectDatabase } from './config/database.js';
@@ -66,6 +67,16 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
+// Specific rate limiting for AI chat (more restrictive)
+const aiChatLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 10, // Limit each IP to 10 AI chat requests per minute
+  message: {
+    error: 'Too many AI chat requests. Please wait a moment before sending another message.',
+  },
+});
+app.use('/api/ai-chat/message', aiChatLimiter);
+
 // CORS middleware
 app.use(corsMiddleware);
 
@@ -92,6 +103,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/chat', authMiddleware, chatRoutes);
 app.use('/api/journal', authMiddleware, journalRoutes);
 app.use('/api/mood', authMiddleware, moodRoutes);
+app.use('/api/ai-chat', authMiddleware, aiChatRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {
@@ -129,6 +141,7 @@ const startServer = async () => {
       logger.info(`📱 Environment: ${process.env.NODE_ENV || 'development'}`);
       logger.info(`🌍 Health check: http://localhost:${PORT}/health`);
       logger.info(`🐛 Sentry test: http://localhost:${PORT}/debug-sentry`);
+      logger.info(`🤖 AI Chat: http://localhost:${PORT}/api/ai-chat`);
     });
   } catch (error) {
     logger.error('Failed to start server:', error);

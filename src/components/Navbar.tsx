@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Brain, Menu, X, Home, MessageCircle, BookOpen, Heart, BarChart3 } from 'lucide-react';
+import { Brain, Menu, X, Home, MessageCircle, BookOpen, Heart, BarChart3, Bot } from 'lucide-react';
 import Button from './Button';
 
 const Navbar: React.FC = () => {
@@ -10,6 +10,7 @@ const Navbar: React.FC = () => {
   const navigation = [
     { name: 'Home', href: '/', icon: Home },
     { name: 'Dashboard', href: '/dashboard', icon: BarChart3 },
+    { name: 'AI Assistant', href: '/ai-chat', icon: Bot },
     { name: 'AI Chat', href: '/chat', icon: MessageCircle },
     { name: 'Journal', href: '/journal', icon: BookOpen },
     { name: 'Mood Tracker', href: '/mood', icon: Heart },

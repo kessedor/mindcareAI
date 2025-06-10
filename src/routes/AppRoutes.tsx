@@ -3,6 +3,7 @@ import { Routes, Route } from 'react-router-dom';
 import Home from '../pages/Home';
 import Dashboard from '../pages/Dashboard';
 import Chat from '../pages/Chat';
+import AIChat from '../pages/AIChat';
 import Journal from '../pages/Journal';
 import MoodTracker from '../pages/MoodTracker';
 import MoodCheckIn from '../pages/MoodCheckIn';
@@ -13,6 +14,7 @@ const AppRoutes: React.FC = () => {
       <Route path="/" element={<Home />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/chat" element={<Chat />} />
+      <Route path="/ai-chat" element={<AIChat />} />
       <Route path="/journal" element={<Journal />} />
       <Route path="/mood" element={<MoodTracker />} />
       <Route path="/mood/check-in" element={<MoodCheckIn />} />
