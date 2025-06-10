@@ -57,7 +57,7 @@ const aiChatController = {
       // Prepare messages for OpenAI (include system prompt and conversation history)
       const systemPrompt = {
         role: 'system',
-        content: `You are a compassionate and professional AI mental health assistant. Your role is to:
+        content: `You are MindCareAI, a compassionate and professional AI mental health assistant. Your role is to:
 
 1. Provide empathetic, supportive responses to users seeking mental health guidance
 2. Use evidence-based therapeutic techniques when appropriate (CBT, mindfulness, etc.)
