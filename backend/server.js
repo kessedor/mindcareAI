@@ -23,6 +23,7 @@ import chatRoutes from './routes/chat.js';
 import journalRoutes from './routes/journal.js';
 import moodRoutes from './routes/mood.js';
 import aiChatRoutes from './routes/aiChat.js';
+import therapyRoutes from './routes/therapy.js';
 
 // Import database configuration
 import { connectDatabase } from './config/database.js';
@@ -104,6 +105,7 @@ app.use('/api/chat', authMiddleware, chatRoutes);
 app.use('/api/journal', authMiddleware, journalRoutes);
 app.use('/api/mood', authMiddleware, moodRoutes);
 app.use('/api/ai-chat', authMiddleware, aiChatRoutes);
+app.use('/api/therapy', authMiddleware, therapyRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {
@@ -142,6 +144,7 @@ const startServer = async () => {
       logger.info(`🌍 Health check: http://localhost:${PORT}/health`);
       logger.info(`🐛 Sentry test: http://localhost:${PORT}/debug-sentry`);
       logger.info(`🤖 AI Chat: http://localhost:${PORT}/api/ai-chat`);
+      logger.info(`📅 Therapy: http://localhost:${PORT}/api/therapy`);
     });
   } catch (error) {
     logger.error('Failed to start server:', error);

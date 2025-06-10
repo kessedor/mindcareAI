@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Brain, Menu, X, Home, MessageCircle, BookOpen, Heart, BarChart3, Bot } from 'lucide-react';
+import { Brain, Menu, X, Home, MessageCircle, BookOpen, Heart, BarChart3, Bot, Shield } from 'lucide-react';
 import Button from './Button';
 
 const Navbar: React.FC = () => {
@@ -14,6 +14,7 @@ const Navbar: React.FC = () => {
     { name: 'AI Chat', href: '/chat', icon: MessageCircle },
     { name: 'Journal', href: '/journal', icon: BookOpen },
     { name: 'Mood Tracker', href: '/mood', icon: Heart },
+    { name: 'Admin', href: '/admin', icon: Shield },
   ];
 
   const isActive = (path: string) => location.pathname === path;

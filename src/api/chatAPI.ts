@@ -5,6 +5,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
+  emotion?: string;
 }
 
 export interface Conversation {
@@ -21,11 +22,33 @@ export interface SendMessageResponse {
     id: string;
     content: string;
     timestamp: string;
+    emotion?: string;
   };
   aiMessage: {
     id: string;
     content: string;
     timestamp: string;
+  };
+}
+
+export interface ConversationSummary {
+  summary: string;
+  conversationId: string;
+  messageCount: number;
+  createdAt: string;
+}
+
+export interface ChatAnalytics {
+  totalConversations: number;
+  totalMessages: number;
+  totalWords: number;
+  averageMessagesPerConversation: number;
+  emotionDistribution: Record<string, number>;
+  moodTrends: Array<{ date: string; emotion: string }>;
+  activeTimeAnalysis: {
+    mostActiveHour: number;
+    conversationsThisWeek: number;
+    conversationsThisMonth: number;
   };
 }
 
@@ -51,4 +74,12 @@ export const chatAPI = {
   // Delete conversation
   deleteConversation: (conversationId: string): Promise<{ data: { message: string } }> =>
     api.delete(`/ai-chat/conversations/${conversationId}`),
+
+  // Summarize conversation
+  summarizeConversation: (conversationId: string): Promise<{ data: ConversationSummary }> =>
+    api.post('/ai-chat/summarize', { conversationId }),
+
+  // Get chat analytics
+  getAnalytics: (): Promise<{ data: ChatAnalytics }> =>
+    api.get('/ai-chat/analytics'),
 };

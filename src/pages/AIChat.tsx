@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Sparkles, MessageCircle, Trash2, Plus } from 'lucide-react';
+import { Send, Bot, User, Sparkles, MessageCircle, Trash2, Plus, FileText, Calendar, BarChart3 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import Button from '../components/Button';
 import { chatAPI, ChatMessage } from '../api/chatAPI';
 
@@ -9,6 +10,8 @@ const AIChat: React.FC = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [summary, setSummary] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
@@ -66,6 +69,7 @@ const AIChat: React.FC = () => {
             role: 'user' as const,
             content: confirmedUserMessage.content,
             timestamp: confirmedUserMessage.timestamp,
+            emotion: confirmedUserMessage.emotion,
           },
           {
             id: aiMessage.id,
@@ -105,6 +109,7 @@ const AIChat: React.FC = () => {
     }]);
     setConversationId(null);
     setError(null);
+    setSummary(null);
   };
 
   const clearConversation = async () => {
@@ -116,6 +121,47 @@ const AIChat: React.FC = () => {
       }
     }
     startNewConversation();
+  };
+
+  const handleSummarize = async () => {
+    if (!conversationId) return;
+
+    setIsSummarizing(true);
+    try {
+      const response = await chatAPI.summarizeConversation(conversationId);
+      setSummary(response.data.summary);
+    } catch (error) {
+      console.error('Failed to summarize conversation:', error);
+      setError('Failed to generate summary. Please try again.');
+    } finally {
+      setIsSummarizing(false);
+    }
+  };
+
+  const getEmotionIcon = (emotion?: string) => {
+    switch (emotion) {
+      case 'happy': return '😊';
+      case 'sad': return '😢';
+      case 'anxious': return '😰';
+      case 'angry': return '😠';
+      case 'excited': return '🤗';
+      case 'frustrated': return '😤';
+      case 'hopeful': return '🌟';
+      default: return '😐';
+    }
+  };
+
+  const getEmotionColor = (emotion?: string) => {
+    switch (emotion) {
+      case 'happy': return 'text-green-500';
+      case 'sad': return 'text-blue-500';
+      case 'anxious': return 'text-yellow-500';
+      case 'angry': return 'text-red-500';
+      case 'excited': return 'text-purple-500';
+      case 'frustrated': return 'text-orange-500';
+      case 'hopeful': return 'text-indigo-500';
+      default: return 'text-gray-500';
+    }
   };
 
   return (
@@ -133,6 +179,41 @@ const AIChat: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Action Buttons */}
+        <div className="mb-6 flex flex-wrap justify-center gap-3">
+          <Link to="/schedule-therapy">
+            <Button variant="outline" size="sm">
+              <Calendar className="h-4 w-4 mr-2" />
+              Book Session
+            </Button>
+          </Link>
+          <Link to="/chat-analytics">
+            <Button variant="outline" size="sm">
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Analytics
+            </Button>
+          </Link>
+          {conversationId && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSummarize}
+              disabled={isSummarizing}
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              {isSummarizing ? 'Summarizing...' : 'Summarize'}
+            </Button>
+          )}
+        </div>
+
+        {/* Summary Display */}
+        {summary && (
+          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <h3 className="font-semibold text-blue-900 mb-2">Session Summary</h3>
+            <p className="text-blue-800 text-sm leading-relaxed">{summary}</p>
+          </div>
+        )}
 
         {/* Chat Container */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg overflow-hidden">
@@ -187,18 +268,37 @@ const AIChat: React.FC = () => {
                       <Bot className="h-4 w-4 mt-1 text-primary-600 flex-shrink-0" />
                     )}
                     {message.role === 'user' && (
-                      <User className="h-4 w-4 mt-1 text-white flex-shrink-0" />
+                      <div className="flex items-center space-x-1">
+                        <User className="h-4 w-4 mt-1 text-white flex-shrink-0" />
+                        {message.emotion && (
+                          <span 
+                            className="text-xs"
+                            title={`Detected emotion: ${message.emotion}`}
+                          >
+                            {getEmotionIcon(message.emotion)}
+                          </span>
+                        )}
+                      </div>
                     )}
                     <div className="flex-1">
                       <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
-                      <p className={`text-xs mt-1 ${
-                        message.role === 'user' ? 'text-white/70' : 'text-neutral-500'
-                      }`}>
-                        {new Date(message.timestamp).toLocaleTimeString([], { 
-                          hour: '2-digit', 
-                          minute: '2-digit' 
-                        })}
-                      </p>
+                      <div className="flex items-center justify-between mt-1">
+                        <p className={`text-xs ${
+                          message.role === 'user' ? 'text-white/70' : 'text-neutral-500'
+                        }`}>
+                          {new Date(message.timestamp).toLocaleTimeString([], { 
+                            hour: '2-digit', 
+                            minute: '2-digit' 
+                          })}
+                        </p>
+                        {message.role === 'user' && message.emotion && (
+                          <span className={`text-xs capitalize ${
+                            message.role === 'user' ? 'text-white/70' : getEmotionColor(message.emotion)
+                          }`}>
+                            {message.emotion}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

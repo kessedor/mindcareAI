@@ -24,4 +24,8 @@ router.get('/conversations', aiChatController.getConversations);
 router.get('/conversations/:conversationId', aiChatController.getConversation);
 router.delete('/conversations/:conversationId', aiChatController.deleteConversation);
 
+// New advanced features
+router.post('/summarize', aiChatController.summarizeConversation);
+router.get('/analytics', aiChatController.getAnalytics);
+
 export default router;
