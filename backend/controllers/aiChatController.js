@@ -16,6 +16,13 @@ const aiChatController = {
       const { message, conversationId } = req.body;
       const userId = req.user.id;
 
+      logger.info('=== AI CHAT REQUEST START ===', {
+        userId,
+        message: message.substring(0, 100),
+        conversationId,
+        timestamp: new Date().toISOString()
+      });
+
       // Validate input
       if (!message || message.trim().length === 0) {
         return res.status(400).json({
@@ -42,6 +49,12 @@ const aiChatController = {
           updatedAt: new Date().toISOString(),
         };
         conversations.push(conversation);
+        logger.info('Created new conversation:', { conversationId: conversation.id });
+      } else {
+        logger.info('Found existing conversation:', { 
+          conversationId: conversation.id, 
+          messageCount: conversation.messages.length 
+        });
       }
 
       // Add user message to conversation
@@ -53,6 +66,12 @@ const aiChatController = {
         emotion: await analyzeEmotion(message), // Add emotion analysis
       };
       conversation.messages.push(userMessage);
+
+      logger.info('Added user message:', {
+        messageId: userMessage.id,
+        emotion: userMessage.emotion,
+        content: userMessage.content.substring(0, 100)
+      });
 
       // Prepare messages for OpenAI - Get last 10 messages for context
       const systemPrompt = {
@@ -94,34 +113,52 @@ Remember: You are a supportive companion providing personalized guidance, not a 
       // Prepare full message array for OpenAI
       const messagesForAI = [systemPrompt, ...conversationHistory];
 
-      // Log the payload being sent to OpenAI for debugging
-      logger.info('OpenAI API Payload:', {
+      // Log the EXACT payload being sent to OpenAI
+      const openaiPayload = {
         model: process.env.OPENAI_MODEL || 'gpt-4',
         messages: messagesForAI,
         max_tokens: parseInt(process.env.OPENAI_MAX_TOKENS) || 500,
         temperature: 0.7,
         presence_penalty: 0.5,
         frequency_penalty: 0.5,
-        conversationId: conversation.id,
-        messageCount: conversation.messages.length
+        user: userId,
+      };
+
+      logger.info('=== OPENAI API PAYLOAD ===', {
+        model: openaiPayload.model,
+        messageCount: messagesForAI.length,
+        systemPromptLength: systemPrompt.content.length,
+        conversationHistoryLength: conversationHistory.length,
+        lastUserMessage: conversationHistory[conversationHistory.length - 1]?.content,
+        temperature: openaiPayload.temperature,
+        presence_penalty: openaiPayload.presence_penalty,
+        frequency_penalty: openaiPayload.frequency_penalty,
+        fullPayload: JSON.stringify(openaiPayload, null, 2)
       });
 
       // Call OpenAI API with improved parameters
-      const completion = await openai.chat.completions.create({
-        model: process.env.OPENAI_MODEL || 'gpt-4',
-        messages: messagesForAI,
-        max_tokens: parseInt(process.env.OPENAI_MAX_TOKENS) || 500,
-        temperature: 0.7,
-        presence_penalty: 0.5,  // Encourage new topics
-        frequency_penalty: 0.5, // Reduce repetition
-        user: userId, // For OpenAI usage tracking
+      logger.info('Calling OpenAI API...');
+      const completion = await openai.chat.completions.create(openaiPayload);
+
+      logger.info('=== OPENAI API RESPONSE ===', {
+        choices: completion.choices?.length || 0,
+        finishReason: completion.choices?.[0]?.finish_reason,
+        usage: completion.usage,
+        fullResponse: JSON.stringify(completion, null, 2)
       });
 
       const aiResponse = completion.choices[0]?.message?.content;
 
       if (!aiResponse) {
+        logger.error('No response content from OpenAI:', { completion });
         throw new Error('No response from OpenAI');
       }
+
+      logger.info('=== AI RESPONSE EXTRACTED ===', {
+        responseLength: aiResponse.length,
+        responsePreview: aiResponse.substring(0, 200),
+        fullResponse: aiResponse
+      });
 
       // Add AI response to conversation
       const aiMessage = {
@@ -134,11 +171,26 @@ Remember: You are a supportive companion providing personalized guidance, not a 
       conversation.updatedAt = new Date().toISOString();
 
       // Log successful response
-      logger.info(`AI chat message processed for user ${userId}`, {
+      logger.info('=== FINAL RESPONSE BEING SENT ===', {
         conversationId: conversation.id,
         messageCount: conversation.messages.length,
         userEmotion: userMessage.emotion,
-        responseLength: aiResponse.length
+        aiResponseLength: aiResponse.length,
+        finalResponse: {
+          message: 'Message sent successfully',
+          conversationId: conversation.id,
+          userMessage: {
+            id: userMessage.id,
+            content: userMessage.content,
+            timestamp: userMessage.timestamp,
+            emotion: userMessage.emotion,
+          },
+          aiMessage: {
+            id: aiMessage.id,
+            content: aiMessage.content,
+            timestamp: aiMessage.timestamp,
+          },
+        }
       });
 
       res.json({
@@ -157,7 +209,12 @@ Remember: You are a supportive companion providing personalized guidance, not a 
         },
       });
     } catch (error) {
-      logger.error('AI chat error:', error);
+      logger.error('=== AI CHAT ERROR ===', {
+        error: error.message,
+        stack: error.stack,
+        openaiError: error.response?.data,
+        statusCode: error.response?.status
+      });
 
       // Handle specific OpenAI errors
       if (error.code === 'insufficient_quota') {
