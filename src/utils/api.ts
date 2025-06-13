@@ -5,7 +5,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 30000, // Increased timeout for AI responses
   headers: {
     'Content-Type': 'application/json',
   },
@@ -30,8 +30,8 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    console.error('API Error:', error);
     if (error.response?.status === 401) {
-      // For testing, don't redirect on 401
       console.warn('Authentication failed, but continuing for testing');
     }
     return Promise.reject(error);
@@ -68,6 +68,29 @@ export const chatAPI = {
   
   deleteSession: (sessionId: string) =>
     api.delete(`/chat/sessions/${sessionId}`),
+};
+
+export const aiChatAPI = {
+  sendMessage: (message: string, conversationId?: string) =>
+    api.post('/ai-chat/message', { message, conversationId }),
+  
+  testConnection: () =>
+    api.get('/ai-chat/test-connection'),
+  
+  getConversations: () =>
+    api.get('/ai-chat/conversations'),
+  
+  getConversation: (conversationId: string) =>
+    api.get(`/ai-chat/conversations/${conversationId}`),
+  
+  deleteConversation: (conversationId: string) =>
+    api.delete(`/ai-chat/conversations/${conversationId}`),
+  
+  summarizeConversation: (conversationId: string) =>
+    api.post('/ai-chat/summarize', { conversationId }),
+  
+  getAnalytics: () =>
+    api.get('/ai-chat/analytics'),
 };
 
 export const journalAPI = {

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, MessageCircle, Trash2, Plus, FileText, Calendar, BarChart3 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Button from '../components/Button';
-import api from '../utils/api';
+import { aiChatAPI } from '../utils/api';
 
 interface ChatMessage {
   id: string;
@@ -36,6 +36,7 @@ const AIChat: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'error'>('checking');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
@@ -46,6 +47,23 @@ const AIChat: React.FC = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages, isTyping]);
+
+  // Test connection on component mount
+  useEffect(() => {
+    const testConnection = async () => {
+      try {
+        const response = await aiChatAPI.testConnection();
+        console.log('Connection test result:', response.data);
+        setConnectionStatus('connected');
+      } catch (error) {
+        console.error('Connection test failed:', error);
+        setConnectionStatus('error');
+        setError('Backend server is not running. Please check the server status.');
+      }
+    };
+
+    testConnection();
+  }, []);
 
   // Initialize with welcome message
   useEffect(() => {
@@ -59,7 +77,7 @@ const AIChat: React.FC = () => {
   }, []);
 
   const handleSendMessage = async () => {
-    if (!inputValue.trim() || isTyping) return;
+    if (!inputValue.trim() || isTyping || connectionStatus !== 'connected') return;
 
     const userMessage: ChatMessage = {
       id: `temp_${Date.now()}`,
@@ -75,11 +93,12 @@ const AIChat: React.FC = () => {
     setError(null);
 
     try {
-      // Call the correct AI chat endpoint
-      const response = await api.post('/ai-chat/message', {
-        message: inputValue.trim(),
-        conversationId: conversationId || undefined
-      });
+      console.log('Sending message to AI:', inputValue.trim());
+      
+      // Call the AI chat API
+      const response = await aiChatAPI.sendMessage(inputValue.trim(), conversationId || undefined);
+      
+      console.log('AI Response received:', response.data);
 
       const { conversationId: newConversationId, userMessage: confirmedUserMessage, aiMessage } = response.data;
 
@@ -117,7 +136,10 @@ const AIChat: React.FC = () => {
       // Show specific error messages
       let errorMessage = 'Failed to send message. Please try again.';
       
-      if (error.response?.status === 503) {
+      if (error.code === 'ECONNREFUSED' || error.message?.includes('Network Error')) {
+        errorMessage = 'Cannot connect to the server. Please make sure the backend is running.';
+        setConnectionStatus('error');
+      } else if (error.response?.status === 503) {
         errorMessage = 'AI service is temporarily unavailable. This might be due to API quota limits.';
       } else if (error.response?.status === 401) {
         errorMessage = 'AI service authentication failed. Please check the API configuration.';
@@ -155,7 +177,7 @@ const AIChat: React.FC = () => {
   const clearConversation = async () => {
     if (conversationId) {
       try {
-        await api.delete(`/ai-chat/conversations/${conversationId}`);
+        await aiChatAPI.deleteConversation(conversationId);
       } catch (error) {
         console.error('Failed to delete conversation:', error);
       }
@@ -168,7 +190,7 @@ const AIChat: React.FC = () => {
 
     setIsSummarizing(true);
     try {
-      const response = await api.post('/ai-chat/summarize', { conversationId });
+      const response = await aiChatAPI.summarizeConversation(conversationId);
       setSummary(response.data.summary);
     } catch (error) {
       console.error('Failed to summarize conversation:', error);
@@ -219,6 +241,26 @@ const AIChat: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Connection Status */}
+        {connectionStatus === 'checking' && (
+          <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-center">
+            <p className="text-yellow-800">Checking server connection...</p>
+          </div>
+        )}
+
+        {connectionStatus === 'error' && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 text-center">
+            <p className="text-red-800">Server connection failed. Please check if the backend is running.</p>
+            <p className="text-red-600 text-sm mt-1">Try: <code>cd backend && npm run dev</code></p>
+          </div>
+        )}
+
+        {connectionStatus === 'connected' && (
+          <div className="mb-6 bg-green-50 border border-green-200 rounded-xl p-4 text-center">
+            <p className="text-green-800">✅ Connected to AI service</p>
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="mb-6 flex flex-wrap justify-center gap-3">
@@ -373,7 +415,7 @@ const AIChat: React.FC = () => {
               <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                 <p className="text-sm text-red-700">{error}</p>
                 <p className="text-xs text-red-600 mt-1">
-                  Note: This app uses GPT-3.5 Turbo which is compatible with free OpenAI accounts.
+                  Note: This app uses GPT-3.5 Turbo. Make sure the backend server is running.
                 </p>
               </div>
             </div>
@@ -391,12 +433,12 @@ const AIChat: React.FC = () => {
                   className="w-full p-3 border border-neutral-300 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   rows={2}
                   maxLength={2000}
-                  disabled={isTyping}
+                  disabled={isTyping || connectionStatus !== 'connected'}
                 />
               </div>
               <Button
                 onClick={handleSendMessage}
-                disabled={!inputValue.trim() || isTyping}
+                disabled={!inputValue.trim() || isTyping || connectionStatus !== 'connected'}
                 className="h-12 w-12 p-0"
               >
                 <Send className="h-5 w-5" />
