@@ -1,12 +1,12 @@
 // Import Sentry instrumentation first
-require('./instrument.js');
+// require('./instrument.js');
 
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
-import * as Sentry from '@sentry/node';
+// import * as Sentry from '@sentry/node';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -39,7 +39,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Sentry request handler must be the first middleware
-app.use(Sentry.Handlers.requestHandler());
+// app.use(Sentry.Handlers.requestHandler());
 
 // Trust proxy for rate limiting
 app.set('trust proxy', 1);
@@ -91,6 +91,18 @@ app.get('/health', (req, res) => {
     status: 'OK',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
+    environment: process.env.NODE_ENV,
+    openaiConfigured: !!process.env.OPENAI_API_KEY,
+  });
+});
+
+// Test endpoint
+app.get('/api/test', (req, res) => {
+  res.json({
+    message: 'Backend server is running!',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV,
+    openaiConfigured: !!process.env.OPENAI_API_KEY,
   });
 });
 
@@ -116,7 +128,7 @@ app.use('*', (req, res) => {
 });
 
 // Sentry error handler must be before any other error middleware
-app.use(Sentry.Handlers.errorHandler());
+// app.use(Sentry.Handlers.errorHandler());
 
 // Global error handler
 app.use(errorHandler);
@@ -135,20 +147,24 @@ process.on('SIGINT', () => {
 // Start server
 const startServer = async () => {
   try {
-    // Connect to database
-    await connectDatabase();
+    // Connect to database (optional for now)
+    try {
+      await connectDatabase();
+    } catch (dbError) {
+      logger.warn('Database connection failed, continuing without database:', dbError.message);
+    }
     
     app.listen(PORT, () => {
       logger.info(`🚀 Server running on port ${PORT}`);
       logger.info(`📱 Environment: ${process.env.NODE_ENV || 'development'}`);
       logger.info(`🌍 Health check: http://localhost:${PORT}/health`);
-      logger.info(`🐛 Sentry test: http://localhost:${PORT}/debug-sentry`);
+      logger.info(`🐛 Test endpoint: http://localhost:${PORT}/api/test`);
       logger.info(`🤖 AI Chat: http://localhost:${PORT}/api/ai-chat`);
-      logger.info(`📅 Therapy: http://localhost:${PORT}/api/therapy`);
+      logger.info(`🔑 OpenAI configured: ${!!process.env.OPENAI_API_KEY}`);
     });
   } catch (error) {
     logger.error('Failed to start server:', error);
-    Sentry.captureException(error);
+    // Sentry.captureException(error);
     process.exit(1);
   }
 };
