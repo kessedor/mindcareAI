@@ -18,8 +18,9 @@ const validateChatMessage = [
   handleValidationErrors,
 ];
 
-// Test endpoint to verify backend is working
+// Test endpoints
 router.get('/test', aiChatController.test);
+router.get('/test-connection', aiChatController.testConnection);
 
 // AI Chat routes
 router.post('/message', validateChatMessage, aiChatController.sendMessage);
@@ -27,7 +28,7 @@ router.get('/conversations', aiChatController.getConversations);
 router.get('/conversations/:conversationId', aiChatController.getConversation);
 router.delete('/conversations/:conversationId', aiChatController.deleteConversation);
 
-// New advanced features
+// Advanced features
 router.post('/summarize', aiChatController.summarizeConversation);
 router.get('/analytics', aiChatController.getAnalytics);
 
