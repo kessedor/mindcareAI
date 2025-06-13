@@ -2,7 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, MessageCircle, Trash2, Plus, FileText, Calendar, BarChart3 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Button from '../components/Button';
-import { aiChatAPI } from '../utils/api';
+// Import the service you want to use:
+// import { aiChatService } from '../services/aiService'; // For real OpenAI calls
+import { mockAiService as aiChatService } from '../services/mockAiService'; // For mock responses
 
 interface ChatMessage {
   id: string;
@@ -12,31 +14,12 @@ interface ChatMessage {
   emotion?: string;
 }
 
-interface SendMessageResponse {
-  message: string;
-  conversationId: string;
-  userMessage: {
-    id: string;
-    content: string;
-    timestamp: string;
-    emotion?: string;
-  };
-  aiMessage: {
-    id: string;
-    content: string;
-    timestamp: string;
-  };
-}
-
 const AIChat: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isSummarizing, setIsSummarizing] = useState(false);
-  const [summary, setSummary] = useState<string | null>(null);
-  const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'error'>('checking');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
@@ -47,23 +30,6 @@ const AIChat: React.FC = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages, isTyping]);
-
-  // Test connection on component mount
-  useEffect(() => {
-    const testConnection = async () => {
-      try {
-        const response = await aiChatAPI.testConnection();
-        console.log('Connection test result:', response.data);
-        setConnectionStatus('connected');
-      } catch (error) {
-        console.error('Connection test failed:', error);
-        setConnectionStatus('error');
-        setError('Backend server is not running. Please check the server status.');
-      }
-    };
-
-    testConnection();
-  }, []);
 
   // Initialize with welcome message
   useEffect(() => {
@@ -77,10 +43,10 @@ const AIChat: React.FC = () => {
   }, []);
 
   const handleSendMessage = async () => {
-    if (!inputValue.trim() || isTyping || connectionStatus !== 'connected') return;
+    if (!inputValue.trim() || isTyping) return;
 
     const userMessage: ChatMessage = {
-      id: `temp_${Date.now()}`,
+      id: `user_${Date.now()}`,
       role: 'user',
       content: inputValue.trim(),
       timestamp: new Date().toISOString(),
@@ -93,63 +59,36 @@ const AIChat: React.FC = () => {
     setError(null);
 
     try {
-      console.log('Sending message to AI:', inputValue.trim());
-      
-      // Call the AI chat API
-      const response = await aiChatAPI.sendMessage(inputValue.trim(), conversationId || undefined);
-      
-      console.log('AI Response received:', response.data);
+      // Prepare history for AI service
+      const history = messages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
 
-      const { conversationId: newConversationId, userMessage: confirmedUserMessage, aiMessage } = response.data;
+      // Call AI service
+      const response = await aiChatService.sendMessage({
+        message: inputValue.trim(),
+        history
+      });
 
-      // Update conversation ID if this is the first message
+      // Add AI response
+      const aiMessage: ChatMessage = {
+        id: `ai_${Date.now()}`,
+        role: 'assistant',
+        content: response.reply,
+        timestamp: new Date().toISOString(),
+      };
+
+      setMessages(prev => [...prev, aiMessage]);
+
+      // Set conversation ID if this is the first exchange
       if (!conversationId) {
-        setConversationId(newConversationId);
+        setConversationId(`conv_${Date.now()}`);
       }
 
-      // Replace temporary user message with confirmed one and add AI response
-      setMessages(prev => {
-        const withoutTemp = prev.filter(msg => msg.id !== userMessage.id);
-        return [
-          ...withoutTemp,
-          {
-            id: confirmedUserMessage.id,
-            role: 'user' as const,
-            content: confirmedUserMessage.content,
-            timestamp: confirmedUserMessage.timestamp,
-            emotion: confirmedUserMessage.emotion,
-          },
-          {
-            id: aiMessage.id,
-            role: 'assistant' as const,
-            content: aiMessage.content,
-            timestamp: aiMessage.timestamp,
-          },
-        ];
-      });
     } catch (error: any) {
       console.error('Failed to send message:', error);
-      
-      // Remove the temporary user message
-      setMessages(prev => prev.filter(msg => msg.id !== userMessage.id));
-      
-      // Show specific error messages
-      let errorMessage = 'Failed to send message. Please try again.';
-      
-      if (error.code === 'ECONNREFUSED' || error.message?.includes('Network Error')) {
-        errorMessage = 'Cannot connect to the server. Please make sure the backend is running.';
-        setConnectionStatus('error');
-      } else if (error.response?.status === 503) {
-        errorMessage = 'AI service is temporarily unavailable. This might be due to API quota limits.';
-      } else if (error.response?.status === 401) {
-        errorMessage = 'AI service authentication failed. Please check the API configuration.';
-      } else if (error.response?.status === 429) {
-        errorMessage = 'Too many requests. Please wait a moment before sending another message.';
-      } else if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      }
-      
-      setError(errorMessage);
+      setError(error.message || 'Failed to send message. Please try again.');
     } finally {
       setIsTyping(false);
     }
@@ -171,59 +110,6 @@ const AIChat: React.FC = () => {
     }]);
     setConversationId(null);
     setError(null);
-    setSummary(null);
-  };
-
-  const clearConversation = async () => {
-    if (conversationId) {
-      try {
-        await aiChatAPI.deleteConversation(conversationId);
-      } catch (error) {
-        console.error('Failed to delete conversation:', error);
-      }
-    }
-    startNewConversation();
-  };
-
-  const handleSummarize = async () => {
-    if (!conversationId) return;
-
-    setIsSummarizing(true);
-    try {
-      const response = await aiChatAPI.summarizeConversation(conversationId);
-      setSummary(response.data.summary);
-    } catch (error) {
-      console.error('Failed to summarize conversation:', error);
-      setError('Failed to generate summary. Please try again.');
-    } finally {
-      setIsSummarizing(false);
-    }
-  };
-
-  const getEmotionIcon = (emotion?: string) => {
-    switch (emotion) {
-      case 'happy': return '😊';
-      case 'sad': return '😢';
-      case 'anxious': return '😰';
-      case 'angry': return '😠';
-      case 'excited': return '🤗';
-      case 'frustrated': return '😤';
-      case 'hopeful': return '🌟';
-      default: return '😐';
-    }
-  };
-
-  const getEmotionColor = (emotion?: string) => {
-    switch (emotion) {
-      case 'happy': return 'text-green-500';
-      case 'sad': return 'text-blue-500';
-      case 'anxious': return 'text-yellow-500';
-      case 'angry': return 'text-red-500';
-      case 'excited': return 'text-purple-500';
-      case 'frustrated': return 'text-orange-500';
-      case 'hopeful': return 'text-indigo-500';
-      default: return 'text-gray-500';
-    }
   };
 
   return (
@@ -242,26 +128,6 @@ const AIChat: React.FC = () => {
           </div>
         </div>
 
-        {/* Connection Status */}
-        {connectionStatus === 'checking' && (
-          <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-center">
-            <p className="text-yellow-800">Checking server connection...</p>
-          </div>
-        )}
-
-        {connectionStatus === 'error' && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 text-center">
-            <p className="text-red-800">Server connection failed. Please check if the backend is running.</p>
-            <p className="text-red-600 text-sm mt-1">Try: <code>cd backend && npm run dev</code></p>
-          </div>
-        )}
-
-        {connectionStatus === 'connected' && (
-          <div className="mb-6 bg-green-50 border border-green-200 rounded-xl p-4 text-center">
-            <p className="text-green-800">✅ Connected to AI service</p>
-          </div>
-        )}
-
         {/* Action Buttons */}
         <div className="mb-6 flex flex-wrap justify-center gap-3">
           <Link to="/schedule-therapy">
@@ -276,26 +142,7 @@ const AIChat: React.FC = () => {
               Analytics
             </Button>
           </Link>
-          {conversationId && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSummarize}
-              disabled={isSummarizing}
-            >
-              <FileText className="h-4 w-4 mr-2" />
-              {isSummarizing ? 'Summarizing...' : 'Summarize'}
-            </Button>
-          )}
         </div>
-
-        {/* Summary Display */}
-        {summary && (
-          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
-            <h3 className="font-semibold text-blue-900 mb-2">Session Summary</h3>
-            <p className="text-blue-800 text-sm leading-relaxed">{summary}</p>
-          </div>
-        )}
 
         {/* Chat Container */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg overflow-hidden">
@@ -306,8 +153,8 @@ const AIChat: React.FC = () => {
               <span className="font-medium text-neutral-900">
                 {conversationId ? 'Active Session' : 'New Session'}
               </span>
-              <span className="text-xs text-neutral-500 bg-green-100 px-2 py-1 rounded-full">
-                GPT-3.5 Turbo
+              <span className="text-xs text-neutral-500 bg-blue-100 px-2 py-1 rounded-full">
+                Mock AI (Development)
               </span>
             </div>
             <div className="flex items-center space-x-2">
@@ -320,17 +167,6 @@ const AIChat: React.FC = () => {
                 <Plus className="h-4 w-4 mr-1" />
                 New
               </Button>
-              {conversationId && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearConversation}
-                  className="text-neutral-600 hover:text-red-600"
-                >
-                  <Trash2 className="h-4 w-4 mr-1" />
-                  Clear
-                </Button>
-              )}
             </div>
           </div>
 
@@ -353,37 +189,18 @@ const AIChat: React.FC = () => {
                       <Bot className="h-4 w-4 mt-1 text-primary-600 flex-shrink-0" />
                     )}
                     {message.role === 'user' && (
-                      <div className="flex items-center space-x-1">
-                        <User className="h-4 w-4 mt-1 text-white flex-shrink-0" />
-                        {message.emotion && (
-                          <span 
-                            className="text-xs"
-                            title={`Detected emotion: ${message.emotion}`}
-                          >
-                            {getEmotionIcon(message.emotion)}
-                          </span>
-                        )}
-                      </div>
+                      <User className="h-4 w-4 mt-1 text-white flex-shrink-0" />
                     )}
                     <div className="flex-1">
                       <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
-                      <div className="flex items-center justify-between mt-1">
-                        <p className={`text-xs ${
-                          message.role === 'user' ? 'text-white/70' : 'text-neutral-500'
-                        }`}>
-                          {new Date(message.timestamp).toLocaleTimeString([], { 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
-                          })}
-                        </p>
-                        {message.role === 'user' && message.emotion && (
-                          <span className={`text-xs capitalize ${
-                            message.role === 'user' ? 'text-white/70' : getEmotionColor(message.emotion)
-                          }`}>
-                            {message.emotion}
-                          </span>
-                        )}
-                      </div>
+                      <p className={`text-xs mt-1 ${
+                        message.role === 'user' ? 'text-white/70' : 'text-neutral-500'
+                      }`}>
+                        {new Date(message.timestamp).toLocaleTimeString([], { 
+                          hour: '2-digit', 
+                          minute: '2-digit' 
+                        })}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -414,9 +231,6 @@ const AIChat: React.FC = () => {
             <div className="px-6 pb-2">
               <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                 <p className="text-sm text-red-700">{error}</p>
-                <p className="text-xs text-red-600 mt-1">
-                  Note: This app uses GPT-3.5 Turbo. Make sure the backend server is running.
-                </p>
               </div>
             </div>
           )}
@@ -433,12 +247,12 @@ const AIChat: React.FC = () => {
                   className="w-full p-3 border border-neutral-300 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   rows={2}
                   maxLength={2000}
-                  disabled={isTyping || connectionStatus !== 'connected'}
+                  disabled={isTyping}
                 />
               </div>
               <Button
                 onClick={handleSendMessage}
-                disabled={!inputValue.trim() || isTyping || connectionStatus !== 'connected'}
+                disabled={!inputValue.trim() || isTyping}
                 className="h-12 w-12 p-0"
               >
                 <Send className="h-5 w-5" />
@@ -447,7 +261,7 @@ const AIChat: React.FC = () => {
             <div className="flex items-center justify-between mt-3 text-xs text-neutral-500">
               <div className="flex items-center space-x-1">
                 <Sparkles className="h-3 w-3" />
-                <span>Powered by OpenAI GPT-3.5 Turbo</span>
+                <span>Powered by Mock AI (Development Mode)</span>
               </div>
               <div className="flex items-center space-x-4">
                 <span>{inputValue.length}/2000</span>
