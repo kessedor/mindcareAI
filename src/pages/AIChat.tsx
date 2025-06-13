@@ -114,8 +114,19 @@ const AIChat: React.FC = () => {
       // Remove the temporary user message
       setMessages(prev => prev.filter(msg => msg.id !== userMessage.id));
       
-      // Show error message
-      const errorMessage = error.response?.data?.message || 'Failed to send message. Please try again.';
+      // Show specific error messages
+      let errorMessage = 'Failed to send message. Please try again.';
+      
+      if (error.response?.status === 503) {
+        errorMessage = 'AI service is temporarily unavailable. This might be due to API quota limits.';
+      } else if (error.response?.status === 401) {
+        errorMessage = 'AI service authentication failed. Please check the API configuration.';
+      } else if (error.response?.status === 429) {
+        errorMessage = 'Too many requests. Please wait a moment before sending another message.';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+      
       setError(errorMessage);
     } finally {
       setIsTyping(false);
@@ -253,6 +264,9 @@ const AIChat: React.FC = () => {
               <span className="font-medium text-neutral-900">
                 {conversationId ? 'Active Session' : 'New Session'}
               </span>
+              <span className="text-xs text-neutral-500 bg-green-100 px-2 py-1 rounded-full">
+                GPT-3.5 Turbo
+              </span>
             </div>
             <div className="flex items-center space-x-2">
               <Button
@@ -358,6 +372,9 @@ const AIChat: React.FC = () => {
             <div className="px-6 pb-2">
               <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                 <p className="text-sm text-red-700">{error}</p>
+                <p className="text-xs text-red-600 mt-1">
+                  Note: This app uses GPT-3.5 Turbo which is compatible with free OpenAI accounts.
+                </p>
               </div>
             </div>
           )}
@@ -388,7 +405,7 @@ const AIChat: React.FC = () => {
             <div className="flex items-center justify-between mt-3 text-xs text-neutral-500">
               <div className="flex items-center space-x-1">
                 <Sparkles className="h-3 w-3" />
-                <span>Powered by OpenAI GPT-4</span>
+                <span>Powered by OpenAI GPT-3.5 Turbo</span>
               </div>
               <div className="flex items-center space-x-4">
                 <span>{inputValue.length}/2000</span>

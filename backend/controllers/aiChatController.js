@@ -84,44 +84,44 @@ const aiChatController = {
         content: userMessage.content.substring(0, 100)
       });
 
-      // Prepare messages for OpenAI - Get last 8 messages for context
+      // Prepare messages for OpenAI - Get last 6 messages for context
       const systemPrompt = {
         role: 'system',
-        content: `You are MindCareAI, a compassionate and trauma-informed AI mental health assistant. 
+        content: `You are MindCareAI, a compassionate and empathetic AI mental health assistant. 
 
 CRITICAL INSTRUCTIONS:
-- You MUST respond uniquely to each user message
-- NEVER use generic responses like "Tell me more about what's been on your mind lately"
-- Respond specifically to what the user just shared
-- Reference previous conversation when relevant
-- Adapt your tone to match the user's emotional state
+- You MUST respond uniquely and specifically to each user message
+- NEVER use generic responses or repeat the same phrases
+- Always reference what the user just shared with you
+- Provide personalized, contextual responses based on their specific situation
+- Vary your language and approach for each response
 
 Current user message: "${message}"
 
 Your role:
-1. Provide empathetic, contextually relevant responses
+1. Provide empathetic, personalized responses that directly address what the user shared
 2. Use evidence-based therapeutic techniques (CBT, mindfulness, validation)
-3. Encourage professional help for serious concerns
-4. NEVER diagnose or prescribe medications
-5. Ask thoughtful, varied follow-up questions
-6. Provide practical coping strategies
+3. Ask thoughtful follow-up questions that are relevant to their specific situation
+4. Offer practical coping strategies when appropriate
+5. Encourage professional help for serious concerns
+6. NEVER diagnose or prescribe medications
 
 Response guidelines:
-- Keep responses under 300 words
-- Use warm, professional tone that varies based on user's state
-- Validate feelings and experiences
-- Offer appropriate hope and encouragement
-- For self-harm mentions, immediately suggest emergency services
-- Build on conversation naturally
+- Keep responses under 200 words
+- Use warm, conversational tone
+- Validate their specific feelings and experiences
+- Reference their actual situation (job loss, relationships, etc.)
+- Provide hope and encouragement tailored to their circumstances
+- For crisis situations, immediately suggest emergency services
 
-AVOID: Generic responses, repetitive questions, clinical jargon
-FOCUS: Personalized, empathetic, contextually appropriate responses
+AVOID: Generic phrases, repetitive responses, clinical jargon, one-size-fits-all advice
+FOCUS: Personalized support that shows you understand their unique situation
 
-Remember: You are a supportive companion providing personalized guidance, not a replacement for professional therapy.`
+Remember: Each person's experience is unique. Respond to THEIR specific message, not a template.`
       };
 
-      // Get conversation history (last 6 messages to maintain context)
-      const recentMessages = conversation.messages.slice(-6);
+      // Get conversation history (last 4 messages to maintain context but stay within limits)
+      const recentMessages = conversation.messages.slice(-4);
       
       // Convert to OpenAI format
       const conversationHistory = recentMessages.map(msg => ({
@@ -132,14 +132,14 @@ Remember: You are a supportive companion providing personalized guidance, not a 
       // Prepare full message array for OpenAI
       const messagesForAI = [systemPrompt, ...conversationHistory];
 
-      // Log the EXACT payload being sent to OpenAI
+      // Use GPT-3.5-turbo for free tier compatibility
       const openaiPayload = {
-        model: process.env.OPENAI_MODEL || 'gpt-4',
+        model: 'gpt-3.5-turbo', // Changed from gpt-4 to gpt-3.5-turbo for free tier
         messages: messagesForAI,
-        max_tokens: parseInt(process.env.OPENAI_MAX_TOKENS) || 500,
-        temperature: 0.8,
-        presence_penalty: 0.6,
-        frequency_penalty: 0.6,
+        max_tokens: 300, // Reduced for free tier limits
+        temperature: 0.7, // Slightly reduced for more consistent responses
+        presence_penalty: 0.3, // Reduced to avoid repetition
+        frequency_penalty: 0.5, // Increased to avoid repetitive phrases
         user: userId,
       };
 
@@ -151,8 +151,7 @@ Remember: You are a supportive companion providing personalized guidance, not a 
         lastUserMessage: conversationHistory[conversationHistory.length - 1]?.content,
         temperature: openaiPayload.temperature,
         presence_penalty: openaiPayload.presence_penalty,
-        frequency_penalty: openaiPayload.frequency_penalty,
-        fullMessages: messagesForAI.map(m => ({ role: m.role, content: m.content.substring(0, 100) + '...' }))
+        frequency_penalty: openaiPayload.frequency_penalty
       });
 
       // Call OpenAI API with improved parameters
@@ -226,7 +225,7 @@ Remember: You are a supportive companion providing personalized guidance, not a 
       if (error.code === 'insufficient_quota') {
         return res.status(503).json({
           error: 'Service Unavailable',
-          message: 'AI service is temporarily unavailable. Please try again later.',
+          message: 'AI service quota exceeded. Please try again later.',
         });
       }
 
@@ -234,6 +233,13 @@ Remember: You are a supportive companion providing personalized guidance, not a 
         return res.status(429).json({
           error: 'Too Many Requests',
           message: 'Please wait a moment before sending another message.',
+        });
+      }
+
+      if (error.status === 401) {
+        return res.status(503).json({
+          error: 'Service Unavailable',
+          message: 'AI service authentication failed. Please check configuration.',
         });
       }
 
@@ -259,7 +265,8 @@ Remember: You are a supportive companion providing personalized guidance, not a 
       timestamp: new Date().toISOString(),
       user: req.user,
       openaiConfigured: !!process.env.OPENAI_API_KEY,
-      environment: process.env.NODE_ENV
+      environment: process.env.NODE_ENV,
+      model: 'gpt-3.5-turbo' // Updated to reflect actual model being used
     });
   },
 
@@ -383,7 +390,7 @@ Remember: You are a supportive companion providing personalized guidance, not a 
         .join('\n\n');
 
       const completion = await openai.chat.completions.create({
-        model: 'gpt-4',
+        model: 'gpt-3.5-turbo', // Changed from gpt-4 to gpt-3.5-turbo
         messages: [
           {
             role: 'system',
@@ -394,7 +401,7 @@ Remember: You are a supportive companion providing personalized guidance, not a 
             content: `Please summarize this therapy conversation:\n\n${conversationText}`,
           },
         ],
-        max_tokens: 300,
+        max_tokens: 200, // Reduced for free tier
         temperature: 0.3,
       });
 
@@ -480,7 +487,7 @@ const analyzeEmotion = async (message) => {
     }
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
+      model: 'gpt-3.5-turbo', // Changed from gpt-3.5-turbo to ensure consistency
       messages: [
         {
           role: 'system',
