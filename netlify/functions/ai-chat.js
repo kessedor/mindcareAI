@@ -25,8 +25,32 @@ export const handler = async (event, context) => {
   }
 
   try {
+    console.log('🚀 AI Chat function called');
+    console.log('📋 Event:', {
+      httpMethod: event.httpMethod,
+      headers: event.headers,
+      bodyLength: event.body?.length || 0
+    });
+
     // Parse request body
-    const { message, history = [] } = JSON.parse(event.body || '{}');
+    let requestData;
+    try {
+      requestData = JSON.parse(event.body || '{}');
+    } catch (parseError) {
+      console.error('❌ JSON Parse Error:', parseError);
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ error: 'Invalid JSON in request body' })
+      };
+    }
+
+    const { message, history = [] } = requestData;
+
+    console.log('📝 Request data:', {
+      message: message?.substring(0, 50) + '...',
+      historyLength: history.length
+    });
 
     if (!message || typeof message !== 'string') {
       return {
@@ -38,12 +62,15 @@ export const handler = async (event, context) => {
 
     // Check for OpenAI API key
     if (!process.env.OPENAI_API_KEY) {
+      console.error('❌ OpenAI API key not configured');
       return {
         statusCode: 500,
         headers,
         body: JSON.stringify({ error: 'OpenAI API key not configured' })
       };
     }
+
+    console.log('🔑 OpenAI API key found:', process.env.OPENAI_API_KEY.substring(0, 10) + '...');
 
     // Construct messages array with full conversation history
     const systemPrompt = {
@@ -54,14 +81,14 @@ export const handler = async (event, context) => {
     // Include the FULL conversation history
     const messages = [systemPrompt, ...history, { role: "user", content: message }];
 
-    console.log('Sending to OpenAI:', {
+    console.log('💬 Sending to OpenAI:', {
       messageCount: messages.length,
       historyLength: history.length,
-      lastUserMessage: message
+      lastUserMessage: message.substring(0, 50) + '...'
     });
 
     // Call OpenAI API
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -77,31 +104,33 @@ export const handler = async (event, context) => {
       })
     });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error('OpenAI API Error:', response.status, errorData);
+    console.log('📡 OpenAI Response status:', openaiResponse.status);
+
+    if (!openaiResponse.ok) {
+      const errorText = await openaiResponse.text();
+      console.error('❌ OpenAI API Error:', openaiResponse.status, errorText);
       
       let errorMessage = 'Failed to get response from AI service';
       
-      if (response.status === 401) {
+      if (openaiResponse.status === 401) {
         errorMessage = 'Invalid OpenAI API key';
-      } else if (response.status === 429) {
+      } else if (openaiResponse.status === 429) {
         errorMessage = 'Rate limit exceeded. Please try again later.';
-      } else if (response.status === 402) {
+      } else if (openaiResponse.status === 402) {
         errorMessage = 'OpenAI API quota exceeded';
       }
 
       return {
-        statusCode: response.status,
+        statusCode: openaiResponse.status,
         headers,
         body: JSON.stringify({ error: errorMessage })
       };
     }
 
-    const data = await response.json();
+    const data = await openaiResponse.json();
     const reply = data.choices?.[0]?.message?.content || "I apologize, but I couldn't generate a response. Please try again.";
 
-    console.log('OpenAI Response:', {
+    console.log('✅ OpenAI Response:', {
       reply: reply.substring(0, 100) + '...',
       usage: data.usage
     });
@@ -116,7 +145,7 @@ export const handler = async (event, context) => {
     };
 
   } catch (error) {
-    console.error('Function Error:', error);
+    console.error('💥 Function Error:', error);
     
     return {
       statusCode: 500,

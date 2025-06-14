@@ -23,6 +23,7 @@ const AIChat: React.FC = () => {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'error'>('checking');
+  const [debugInfo, setDebugInfo] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
@@ -38,16 +39,23 @@ const AIChat: React.FC = () => {
   useEffect(() => {
     const testConnection = async () => {
       try {
+        setDebugInfo('Testing connection to /.netlify/functions/ai-chat...');
+        
         // Test with a simple message
-        await aiChatService.sendMessage({
+        const response = await aiChatService.sendMessage({
           message: "Hello",
           history: []
         });
+        
+        console.log('Connection test successful:', response);
         setConnectionStatus('connected');
-      } catch (error) {
+        setDebugInfo('✅ Connection successful!');
+        
+      } catch (error: any) {
         console.error('Connection test failed:', error);
         setConnectionStatus('error');
-        setError('Failed to connect to AI service. Please check your configuration.');
+        setDebugInfo(`❌ Connection failed: ${error.message}`);
+        setError(`Failed to connect to AI service: ${error.message}`);
       }
     };
 
@@ -146,6 +154,37 @@ const AIChat: React.FC = () => {
     setError(null);
   };
 
+  // Test function for debugging
+  const testNetlifyFunction = async () => {
+    try {
+      setDebugInfo('Testing Netlify function directly...');
+      
+      const response = await fetch("/.netlify/functions/ai-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          message: "Test message",
+          history: []
+        })
+      });
+
+      const responseText = await response.text();
+      console.log('Raw response:', responseText);
+      
+      if (!response.ok) {
+        setDebugInfo(`❌ HTTP ${response.status}: ${responseText}`);
+        return;
+      }
+
+      const data = JSON.parse(responseText);
+      setDebugInfo(`✅ Function works! Response: ${data.reply?.substring(0, 50)}...`);
+      
+    } catch (error: any) {
+      setDebugInfo(`❌ Function test failed: ${error.message}`);
+      console.error('Function test error:', error);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-secondary-50 pt-8">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
@@ -164,21 +203,39 @@ const AIChat: React.FC = () => {
 
         {/* Connection Status */}
         {connectionStatus === 'checking' && (
-          <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-center">
-            <p className="text-yellow-800">Connecting to AI service...</p>
+          <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+            <p className="text-yellow-800 font-medium">Connecting to AI service...</p>
+            <p className="text-yellow-700 text-sm mt-1">{debugInfo}</p>
           </div>
         )}
 
         {connectionStatus === 'error' && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 text-center">
-            <p className="text-red-800">Failed to connect to AI service.</p>
-            <p className="text-red-600 text-sm mt-1">Please ensure your OpenAI API key is configured in environment variables.</p>
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4">
+            <p className="text-red-800 font-medium">Failed to connect to AI service</p>
+            <p className="text-red-700 text-sm mt-1">{debugInfo}</p>
+            <div className="mt-3 space-y-2">
+              <p className="text-red-600 text-sm">Troubleshooting steps:</p>
+              <ul className="text-red-600 text-sm list-disc list-inside space-y-1">
+                <li>Make sure you've set the OPENAI_API_KEY environment variable</li>
+                <li>Check that the Netlify function is deployed</li>
+                <li>Verify your OpenAI API key is valid and has credits</li>
+              </ul>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={testNetlifyFunction}
+                className="mt-2"
+              >
+                Test Function
+              </Button>
+            </div>
           </div>
         )}
 
         {connectionStatus === 'connected' && (
-          <div className="mb-6 bg-green-50 border border-green-200 rounded-xl p-4 text-center">
-            <p className="text-green-800">✅ Connected to OpenAI GPT-3.5 Turbo</p>
+          <div className="mb-6 bg-green-50 border border-green-200 rounded-xl p-4">
+            <p className="text-green-800 font-medium">✅ Connected to OpenAI GPT-3.5 Turbo</p>
+            <p className="text-green-700 text-sm mt-1">{debugInfo}</p>
           </div>
         )}
 
