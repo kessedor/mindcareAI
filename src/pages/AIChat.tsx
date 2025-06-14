@@ -77,24 +77,33 @@ const AIChat: React.FC = () => {
 
     // Add user message immediately
     setMessages(prev => [...prev, userMessage]);
+    const currentInput = inputValue.trim();
     setInputValue('');
     setIsTyping(true);
     setError(null);
 
     try {
-      // Prepare history for AI service (exclude welcome message)
-      const history = messages
+      // Prepare history for AI service - include ALL previous messages except welcome
+      const conversationHistory = messages
         .filter(msg => msg.id !== 'welcome' && msg.id !== 'welcome_new')
         .map(msg => ({
           role: msg.role,
           content: msg.content
         }));
 
-      // Call AI service
-      const response = await aiChatService.sendMessage({
-        message: inputValue.trim(),
-        history
+      console.log('Sending to AI:', {
+        message: currentInput,
+        historyLength: conversationHistory.length,
+        history: conversationHistory
       });
+
+      // Call AI service with full conversation history
+      const response = await aiChatService.sendMessage({
+        message: currentInput,
+        history: conversationHistory
+      });
+
+      console.log('AI Response:', response);
 
       // Add AI response
       const aiMessage: ChatMessage = {
@@ -200,6 +209,10 @@ const AIChat: React.FC = () => {
               </span>
               <span className="text-xs text-neutral-500 bg-green-100 px-2 py-1 rounded-full">
                 GPT-3.5 Turbo
+              </span>
+              {/* Debug info */}
+              <span className="text-xs text-neutral-400 bg-neutral-100 px-2 py-1 rounded-full">
+                {messages.filter(m => m.id !== 'welcome' && m.id !== 'welcome_new').length} messages
               </span>
             </div>
             <div className="flex items-center space-x-2">
