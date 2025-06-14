@@ -2,9 +2,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, MessageCircle, Trash2, Plus, FileText, Calendar, BarChart3 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Button from '../components/Button';
-// Import the service you want to use:
-// import { aiChatService } from '../services/aiService'; // For real OpenAI calls
-import { mockAiService as aiChatService } from '../services/mockAiService'; // For mock responses
+
+// Choose your AI service:
+// import { aiChatService } from '../services/aiService'; // For direct OpenAI calls (exposes API key)
+// import { mockAiService as aiChatService } from '../services/mockAiService'; // For mock responses
+import { netlifyAiService as aiChatService } from '../services/netlifyAiService'; // For Netlify function (recommended)
 
 interface ChatMessage {
   id: string;
@@ -20,6 +22,7 @@ const AIChat: React.FC = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'error'>('checking');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
@@ -30,6 +33,26 @@ const AIChat: React.FC = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages, isTyping]);
+
+  // Test connection on component mount
+  useEffect(() => {
+    const testConnection = async () => {
+      try {
+        // Test with a simple message
+        await aiChatService.sendMessage({
+          message: "Hello",
+          history: []
+        });
+        setConnectionStatus('connected');
+      } catch (error) {
+        console.error('Connection test failed:', error);
+        setConnectionStatus('error');
+        setError('Failed to connect to AI service. Please check your configuration.');
+      }
+    };
+
+    testConnection();
+  }, []);
 
   // Initialize with welcome message
   useEffect(() => {
@@ -43,7 +66,7 @@ const AIChat: React.FC = () => {
   }, []);
 
   const handleSendMessage = async () => {
-    if (!inputValue.trim() || isTyping) return;
+    if (!inputValue.trim() || isTyping || connectionStatus !== 'connected') return;
 
     const userMessage: ChatMessage = {
       id: `user_${Date.now()}`,
@@ -59,11 +82,13 @@ const AIChat: React.FC = () => {
     setError(null);
 
     try {
-      // Prepare history for AI service
-      const history = messages.map(msg => ({
-        role: msg.role,
-        content: msg.content
-      }));
+      // Prepare history for AI service (exclude welcome message)
+      const history = messages
+        .filter(msg => msg.id !== 'welcome' && msg.id !== 'welcome_new')
+        .map(msg => ({
+          role: msg.role,
+          content: msg.content
+        }));
 
       // Call AI service
       const response = await aiChatService.sendMessage({
@@ -128,6 +153,26 @@ const AIChat: React.FC = () => {
           </div>
         </div>
 
+        {/* Connection Status */}
+        {connectionStatus === 'checking' && (
+          <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-center">
+            <p className="text-yellow-800">Connecting to AI service...</p>
+          </div>
+        )}
+
+        {connectionStatus === 'error' && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 text-center">
+            <p className="text-red-800">Failed to connect to AI service.</p>
+            <p className="text-red-600 text-sm mt-1">Please ensure your OpenAI API key is configured in environment variables.</p>
+          </div>
+        )}
+
+        {connectionStatus === 'connected' && (
+          <div className="mb-6 bg-green-50 border border-green-200 rounded-xl p-4 text-center">
+            <p className="text-green-800">✅ Connected to OpenAI GPT-3.5 Turbo</p>
+          </div>
+        )}
+
         {/* Action Buttons */}
         <div className="mb-6 flex flex-wrap justify-center gap-3">
           <Link to="/schedule-therapy">
@@ -153,8 +198,8 @@ const AIChat: React.FC = () => {
               <span className="font-medium text-neutral-900">
                 {conversationId ? 'Active Session' : 'New Session'}
               </span>
-              <span className="text-xs text-neutral-500 bg-blue-100 px-2 py-1 rounded-full">
-                Mock AI (Development)
+              <span className="text-xs text-neutral-500 bg-green-100 px-2 py-1 rounded-full">
+                GPT-3.5 Turbo
               </span>
             </div>
             <div className="flex items-center space-x-2">
@@ -247,12 +292,12 @@ const AIChat: React.FC = () => {
                   className="w-full p-3 border border-neutral-300 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   rows={2}
                   maxLength={2000}
-                  disabled={isTyping}
+                  disabled={isTyping || connectionStatus !== 'connected'}
                 />
               </div>
               <Button
                 onClick={handleSendMessage}
-                disabled={!inputValue.trim() || isTyping}
+                disabled={!inputValue.trim() || isTyping || connectionStatus !== 'connected'}
                 className="h-12 w-12 p-0"
               >
                 <Send className="h-5 w-5" />
@@ -261,7 +306,7 @@ const AIChat: React.FC = () => {
             <div className="flex items-center justify-between mt-3 text-xs text-neutral-500">
               <div className="flex items-center space-x-1">
                 <Sparkles className="h-3 w-3" />
-                <span>Powered by Mock AI (Development Mode)</span>
+                <span>Powered by OpenAI GPT-3.5 Turbo</span>
               </div>
               <div className="flex items-center space-x-4">
                 <span>{inputValue.length}/2000</span>
