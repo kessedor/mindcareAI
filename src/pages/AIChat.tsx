@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Sparkles, MessageCircle, Trash2, Plus, FileText, Calendar, BarChart3 } from 'lucide-react';
+import { Send, Bot, User, Sparkles, MessageCircle, Trash2, Plus, FileText, Calendar, BarChart3, Globe } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Button from '../components/Button';
+import LanguageSelector from '../components/LanguageSelector';
+import { translationService, SupportedLanguage } from '../services/translationService';
 
 // Choose your AI service:
 // import { aiChatService } from '../services/aiService'; // For direct OpenAI calls (exposes API key)
@@ -12,8 +14,10 @@ interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  originalContent?: string; // Store original text before translation
   timestamp: string;
   emotion?: string;
+  language?: SupportedLanguage;
 }
 
 const AIChat: React.FC = () => {
@@ -24,6 +28,8 @@ const AIChat: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'error'>('checking');
   const [debugInfo, setDebugInfo] = useState<string>('');
+  const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>('en');
+  const [isTranslating, setIsTranslating] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
@@ -64,61 +70,166 @@ const AIChat: React.FC = () => {
 
   // Initialize with welcome message
   useEffect(() => {
-    const welcomeMessage: ChatMessage = {
-      id: 'welcome',
-      role: 'assistant',
-      content: "Hello! I'm your AI mental health companion. I'm here to listen, provide support, and help you work through any challenges you're facing. How are you feeling today?",
-      timestamp: new Date().toISOString(),
+    const initializeWelcomeMessage = async () => {
+      let welcomeContent = "Hello! I'm your AI mental health companion. I'm here to listen, provide support, and help you work through any challenges you're facing. How are you feeling today?";
+      
+      // Translate welcome message if not English
+      if (selectedLanguage !== 'en') {
+        try {
+          welcomeContent = await translationService.translateFromEnglish(welcomeContent, selectedLanguage);
+        } catch (error) {
+          console.error('Failed to translate welcome message:', error);
+        }
+      }
+
+      const welcomeMessage: ChatMessage = {
+        id: 'welcome',
+        role: 'assistant',
+        content: welcomeContent,
+        originalContent: "Hello! I'm your AI mental health companion. I'm here to listen, provide support, and help you work through any challenges you're facing. How are you feeling today?",
+        timestamp: new Date().toISOString(),
+        language: selectedLanguage,
+      };
+      setMessages([welcomeMessage]);
     };
-    setMessages([welcomeMessage]);
-  }, []);
+
+    initializeWelcomeMessage();
+  }, [selectedLanguage]);
+
+  const handleLanguageChange = async (newLanguage: SupportedLanguage) => {
+    if (newLanguage === selectedLanguage) return;
+    
+    setIsTranslating(true);
+    setSelectedLanguage(newLanguage);
+    
+    try {
+      // Translate existing messages if there are any (except welcome message)
+      if (messages.length > 1) {
+        const translatedMessages = await Promise.all(
+          messages.map(async (message) => {
+            if (message.id === 'welcome') {
+              // Handle welcome message separately
+              let translatedContent = message.originalContent || message.content;
+              if (newLanguage !== 'en') {
+                translatedContent = await translationService.translateFromEnglish(translatedContent, newLanguage);
+              }
+              return {
+                ...message,
+                content: translatedContent,
+                language: newLanguage,
+              };
+            }
+            
+            // For other messages, translate from their original language
+            let translatedContent = message.originalContent || message.content;
+            
+            if (newLanguage !== 'en') {
+              // If we have original content, translate from English to target language
+              if (message.originalContent) {
+                translatedContent = await translationService.translateFromEnglish(message.originalContent, newLanguage);
+              } else {
+                // If no original content, assume current content is in the previous language
+                translatedContent = await translationService.translate(message.content, newLanguage, message.language || 'en');
+              }
+            } else {
+              // If switching to English, use original content if available
+              translatedContent = message.originalContent || message.content;
+            }
+            
+            return {
+              ...message,
+              content: translatedContent,
+              language: newLanguage,
+            };
+          })
+        );
+        
+        setMessages(translatedMessages);
+      }
+    } catch (error) {
+      console.error('Failed to translate messages:', error);
+      setError('Failed to translate messages. Please try again.');
+    } finally {
+      setIsTranslating(false);
+    }
+  };
 
   const handleSendMessage = async () => {
-    if (!inputValue.trim() || isTyping || connectionStatus !== 'connected') return;
+    if (!inputValue.trim() || isTyping || connectionStatus !== 'connected' || isTranslating) return;
+
+    const originalUserInput = inputValue.trim();
+    let messageForAI = originalUserInput;
+
+    // Translate user input to English if needed for AI processing
+    if (selectedLanguage !== 'en') {
+      try {
+        messageForAI = await translationService.translateToEnglish(originalUserInput, selectedLanguage);
+      } catch (error) {
+        console.error('Failed to translate user input:', error);
+        setError('Failed to translate your message. Please try again.');
+        return;
+      }
+    }
 
     const userMessage: ChatMessage = {
       id: `user_${Date.now()}`,
       role: 'user',
-      content: inputValue.trim(),
+      content: originalUserInput,
+      originalContent: selectedLanguage !== 'en' ? messageForAI : undefined,
       timestamp: new Date().toISOString(),
+      language: selectedLanguage,
     };
 
     // Add user message immediately
     setMessages(prev => [...prev, userMessage]);
-    const currentInput = inputValue.trim();
     setInputValue('');
     setIsTyping(true);
     setError(null);
 
     try {
-      // Prepare history for AI service - include ALL previous messages except welcome
+      // Prepare history for AI service - use English versions for AI processing
       const conversationHistory = messages
         .filter(msg => msg.id !== 'welcome' && msg.id !== 'welcome_new')
         .map(msg => ({
           role: msg.role,
-          content: msg.content
+          content: msg.originalContent || msg.content // Use original English content for AI
         }));
 
       console.log('Sending to AI:', {
-        message: currentInput,
+        message: messageForAI,
         historyLength: conversationHistory.length,
         history: conversationHistory
       });
 
-      // Call AI service with full conversation history
+      // Call AI service with English content
       const response = await aiChatService.sendMessage({
-        message: currentInput,
+        message: messageForAI,
         history: conversationHistory
       });
 
       console.log('AI Response:', response);
 
+      let aiResponseContent = response.reply;
+      let originalAiResponse = response.reply;
+
+      // Translate AI response to user's language if needed
+      if (selectedLanguage !== 'en') {
+        try {
+          aiResponseContent = await translationService.translateFromEnglish(response.reply, selectedLanguage);
+        } catch (error) {
+          console.error('Failed to translate AI response:', error);
+          // Use original English response if translation fails
+        }
+      }
+
       // Add AI response
       const aiMessage: ChatMessage = {
         id: `ai_${Date.now()}`,
         role: 'assistant',
-        content: response.reply,
+        content: aiResponseContent,
+        originalContent: selectedLanguage !== 'en' ? originalAiResponse : undefined,
         timestamp: new Date().toISOString(),
+        language: selectedLanguage,
       };
 
       setMessages(prev => [...prev, aiMessage]);
@@ -143,12 +254,25 @@ const AIChat: React.FC = () => {
     }
   };
 
-  const startNewConversation = () => {
+  const startNewConversation = async () => {
+    let welcomeContent = "Hello! I'm here to support you. What would you like to talk about today?";
+    
+    // Translate welcome message if not English
+    if (selectedLanguage !== 'en') {
+      try {
+        welcomeContent = await translationService.translateFromEnglish(welcomeContent, selectedLanguage);
+      } catch (error) {
+        console.error('Failed to translate welcome message:', error);
+      }
+    }
+
     setMessages([{
       id: 'welcome_new',
       role: 'assistant',
-      content: "Hello! I'm here to support you. What would you like to talk about today?",
+      content: welcomeContent,
+      originalContent: "Hello! I'm here to support you. What would you like to talk about today?",
       timestamp: new Date().toISOString(),
+      language: selectedLanguage,
     }]);
     setConversationId(null);
     setError(null);
@@ -200,6 +324,26 @@ const AIChat: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Language Selector */}
+        <div className="mb-6 flex justify-center">
+          <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4 shadow-lg">
+            <LanguageSelector
+              selectedLanguage={selectedLanguage}
+              onLanguageChange={handleLanguageChange}
+            />
+          </div>
+        </div>
+
+        {/* Translation Status */}
+        {isTranslating && (
+          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <div className="flex items-center space-x-2">
+              <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-blue-800 font-medium">Translating messages...</p>
+            </div>
+          </div>
+        )}
 
         {/* Connection Status */}
         {connectionStatus === 'checking' && (
@@ -267,6 +411,12 @@ const AIChat: React.FC = () => {
               <span className="text-xs text-neutral-500 bg-green-100 px-2 py-1 rounded-full">
                 GPT-3.5 Turbo
               </span>
+              {selectedLanguage !== 'en' && (
+                <span className="text-xs text-neutral-500 bg-blue-100 px-2 py-1 rounded-full flex items-center">
+                  <Globe className="h-3 w-3 mr-1" />
+                  {selectedLanguage.toUpperCase()}
+                </span>
+              )}
               {/* Debug info */}
               <span className="text-xs text-neutral-400 bg-neutral-100 px-2 py-1 rounded-full">
                 {messages.filter(m => m.id !== 'welcome' && m.id !== 'welcome_new').length} messages
@@ -308,14 +458,25 @@ const AIChat: React.FC = () => {
                     )}
                     <div className="flex-1">
                       <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
-                      <p className={`text-xs mt-1 ${
-                        message.role === 'user' ? 'text-white/70' : 'text-neutral-500'
-                      }`}>
-                        {new Date(message.timestamp).toLocaleTimeString([], { 
-                          hour: '2-digit', 
-                          minute: '2-digit' 
-                        })}
-                      </p>
+                      <div className="flex items-center justify-between mt-1">
+                        <p className={`text-xs ${
+                          message.role === 'user' ? 'text-white/70' : 'text-neutral-500'
+                        }`}>
+                          {new Date(message.timestamp).toLocaleTimeString([], { 
+                            hour: '2-digit', 
+                            minute: '2-digit' 
+                          })}
+                        </p>
+                        {message.language && message.language !== 'en' && (
+                          <span className={`text-xs px-1 py-0.5 rounded ${
+                            message.role === 'user' 
+                              ? 'bg-white/20 text-white/80' 
+                              : 'bg-neutral-200 text-neutral-600'
+                          }`}>
+                            {message.language.toUpperCase()}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -358,16 +519,19 @@ const AIChat: React.FC = () => {
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyPress={handleKeyPress}
-                  placeholder="Share what's on your mind..."
+                  placeholder={selectedLanguage === 'en' 
+                    ? "Share what's on your mind..." 
+                    : "Share what's on your mind... (type in your selected language)"
+                  }
                   className="w-full p-3 border border-neutral-300 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   rows={2}
                   maxLength={2000}
-                  disabled={isTyping || connectionStatus !== 'connected'}
+                  disabled={isTyping || connectionStatus !== 'connected' || isTranslating}
                 />
               </div>
               <Button
                 onClick={handleSendMessage}
-                disabled={!inputValue.trim() || isTyping || connectionStatus !== 'connected'}
+                disabled={!inputValue.trim() || isTyping || connectionStatus !== 'connected' || isTranslating}
                 className="h-12 w-12 p-0"
               >
                 <Send className="h-5 w-5" />
@@ -377,6 +541,13 @@ const AIChat: React.FC = () => {
               <div className="flex items-center space-x-1">
                 <Sparkles className="h-3 w-3" />
                 <span>Powered by OpenAI GPT-3.5 Turbo</span>
+                {selectedLanguage !== 'en' && (
+                  <>
+                    <span>•</span>
+                    <Globe className="h-3 w-3" />
+                    <span>Translated via Lingo.dev</span>
+                  </>
+                )}
               </div>
               <div className="flex items-center space-x-4">
                 <span>{inputValue.length}/2000</span>
@@ -391,6 +562,11 @@ const AIChat: React.FC = () => {
           <p className="text-sm text-neutral-500 max-w-2xl mx-auto">
             This AI assistant provides supportive guidance but is not a replacement for professional mental health care. 
             If you're experiencing a crisis, please contact emergency services or a mental health professional immediately.
+            {selectedLanguage !== 'en' && (
+              <span className="block mt-1 text-xs">
+                Translation powered by Lingo.dev. Translations may not be perfect.
+              </span>
+            )}
           </p>
         </div>
       </div>
