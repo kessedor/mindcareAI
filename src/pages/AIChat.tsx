@@ -3,19 +3,16 @@ import { Send, Bot, User, Sparkles, MessageCircle, Trash2, Plus, FileText, Calen
 import { Link } from 'react-router-dom';
 import Button from '../components/Button';
 import LanguageSelector from '../components/LanguageSelector';
-import { translationService, SupportedLanguage } from '../services/translationService';
 import { useUITranslations } from '../hooks/useUITranslations';
+import { SupportedLanguage } from '../lib/uiTranslations';
 
-// Choose your AI service:
-// import { aiChatService } from '../services/aiService'; // For direct OpenAI calls (exposes API key)
-// import { mockAiService as aiChatService } from '../services/mockAiService'; // For mock responses
-import { netlifyAiService as aiChatService } from '../services/netlifyAiService'; // For Netlify function (recommended)
+// Use Netlify function for AI chat (recommended for production)
+import { netlifyAiService as aiChatService } from '../services/netlifyAiService';
 
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  originalContent?: string; // Store original text before translation
   timestamp: string;
   emotion?: string;
   language?: SupportedLanguage;
@@ -30,7 +27,6 @@ const AIChat: React.FC = () => {
   const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'error'>('checking');
   const [debugInfo, setDebugInfo] = useState<string>('');
   const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>('en');
-  const [isTranslating, setIsTranslating] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Load UI translations for the selected language
@@ -47,8 +43,6 @@ const AIChat: React.FC = () => {
     'connection_failed',
     'book_session',
     'analytics',
-    'translating_messages',
-    'translation_notice',
     'emergency_disclaimer',
     'language'
   ]);
@@ -91,112 +85,29 @@ const AIChat: React.FC = () => {
 
   // Initialize with welcome message
   useEffect(() => {
-    const initializeWelcomeMessage = async () => {
-      let welcomeContent = "Hello! I'm your AI mental health companion. I'm here to listen, provide support, and help you work through any challenges you're facing. How are you feeling today?";
-      
-      // Translate welcome message if not English
-      if (selectedLanguage !== 'en') {
-        try {
-          welcomeContent = await translationService.translateFromEnglish(welcomeContent, selectedLanguage);
-        } catch (error) {
-          console.error('Failed to translate welcome message:', error);
-        }
-      }
-
-      const welcomeMessage: ChatMessage = {
-        id: 'welcome',
-        role: 'assistant',
-        content: welcomeContent,
-        originalContent: "Hello! I'm your AI mental health companion. I'm here to listen, provide support, and help you work through any challenges you're facing. How are you feeling today?",
-        timestamp: new Date().toISOString(),
-        language: selectedLanguage,
-      };
-      setMessages([welcomeMessage]);
+    const welcomeMessage: ChatMessage = {
+      id: 'welcome',
+      role: 'assistant',
+      content: "Hello! I'm your AI mental health companion. I'm here to listen, provide support, and help you work through any challenges you're facing. How are you feeling today?",
+      timestamp: new Date().toISOString(),
+      language: selectedLanguage,
     };
-
-    initializeWelcomeMessage();
+    setMessages([welcomeMessage]);
   }, [selectedLanguage]);
 
-  const handleLanguageChange = async (newLanguage: SupportedLanguage) => {
-    if (newLanguage === selectedLanguage) return;
-    
-    setIsTranslating(true);
+  const handleLanguageChange = (newLanguage: SupportedLanguage) => {
     setSelectedLanguage(newLanguage);
-    
-    try {
-      // Translate existing messages if there are any (except welcome message)
-      if (messages.length > 1) {
-        const translatedMessages = await Promise.all(
-          messages.map(async (message) => {
-            if (message.id === 'welcome') {
-              // Handle welcome message separately
-              let translatedContent = message.originalContent || message.content;
-              if (newLanguage !== 'en') {
-                translatedContent = await translationService.translateFromEnglish(translatedContent, newLanguage);
-              }
-              return {
-                ...message,
-                content: translatedContent,
-                language: newLanguage,
-              };
-            }
-            
-            // For other messages, translate from their original language
-            let translatedContent = message.originalContent || message.content;
-            
-            if (newLanguage !== 'en') {
-              // If we have original content, translate from English to target language
-              if (message.originalContent) {
-                translatedContent = await translationService.translateFromEnglish(message.originalContent, newLanguage);
-              } else {
-                // If no original content, assume current content is in the previous language
-                translatedContent = await translationService.translate(message.content, newLanguage, message.language || 'en');
-              }
-            } else {
-              // If switching to English, use original content if available
-              translatedContent = message.originalContent || message.content;
-            }
-            
-            return {
-              ...message,
-              content: translatedContent,
-              language: newLanguage,
-            };
-          })
-        );
-        
-        setMessages(translatedMessages);
-      }
-    } catch (error) {
-      console.error('Failed to translate messages:', error);
-      setError('Failed to translate messages. Please try again.');
-    } finally {
-      setIsTranslating(false);
-    }
+    // Note: We don't translate existing messages - GPT handles multilingual conversations natively
+    // The UI will update to the new language, but chat history remains as-is
   };
 
   const handleSendMessage = async () => {
-    if (!inputValue.trim() || isTyping || connectionStatus !== 'connected' || isTranslating) return;
-
-    const originalUserInput = inputValue.trim();
-    let messageForAI = originalUserInput;
-
-    // Translate user input to English if needed for AI processing
-    if (selectedLanguage !== 'en') {
-      try {
-        messageForAI = await translationService.translateToEnglish(originalUserInput, selectedLanguage);
-      } catch (error) {
-        console.error('Failed to translate user input:', error);
-        setError('Failed to translate your message. Please try again.');
-        return;
-      }
-    }
+    if (!inputValue.trim() || isTyping || connectionStatus !== 'connected') return;
 
     const userMessage: ChatMessage = {
       id: `user_${Date.now()}`,
       role: 'user',
-      content: originalUserInput,
-      originalContent: selectedLanguage !== 'en' ? messageForAI : undefined,
+      content: inputValue.trim(),
       timestamp: new Date().toISOString(),
       language: selectedLanguage,
     };
@@ -208,47 +119,33 @@ const AIChat: React.FC = () => {
     setError(null);
 
     try {
-      // Prepare history for AI service - use English versions for AI processing
+      // Prepare history for AI service - GPT handles multilingual conversations natively
       const conversationHistory = messages
         .filter(msg => msg.id !== 'welcome' && msg.id !== 'welcome_new')
         .map(msg => ({
           role: msg.role,
-          content: msg.originalContent || msg.content // Use original English content for AI
+          content: msg.content
         }));
 
       console.log('Sending to AI:', {
-        message: messageForAI,
+        message: userMessage.content,
         historyLength: conversationHistory.length,
         history: conversationHistory
       });
 
-      // Call AI service with English content
+      // Call AI service - GPT will respond in the same language as the user input
       const response = await aiChatService.sendMessage({
-        message: messageForAI,
+        message: userMessage.content,
         history: conversationHistory
       });
 
       console.log('AI Response:', response);
 
-      let aiResponseContent = response.reply;
-      let originalAiResponse = response.reply;
-
-      // Translate AI response to user's language if needed
-      if (selectedLanguage !== 'en') {
-        try {
-          aiResponseContent = await translationService.translateFromEnglish(response.reply, selectedLanguage);
-        } catch (error) {
-          console.error('Failed to translate AI response:', error);
-          // Use original English response if translation fails
-        }
-      }
-
       // Add AI response
       const aiMessage: ChatMessage = {
         id: `ai_${Date.now()}`,
         role: 'assistant',
-        content: aiResponseContent,
-        originalContent: selectedLanguage !== 'en' ? originalAiResponse : undefined,
+        content: response.reply,
         timestamp: new Date().toISOString(),
         language: selectedLanguage,
       };
@@ -275,26 +172,16 @@ const AIChat: React.FC = () => {
     }
   };
 
-  const startNewConversation = async () => {
-    let welcomeContent = "Hello! I'm here to support you. What would you like to talk about today?";
-    
-    // Translate welcome message if not English
-    if (selectedLanguage !== 'en') {
-      try {
-        welcomeContent = await translationService.translateFromEnglish(welcomeContent, selectedLanguage);
-      } catch (error) {
-        console.error('Failed to translate welcome message:', error);
-      }
-    }
-
-    setMessages([{
+  const startNewConversation = () => {
+    const welcomeMessage: ChatMessage = {
       id: 'welcome_new',
       role: 'assistant',
-      content: welcomeContent,
-      originalContent: "Hello! I'm here to support you. What would you like to talk about today?",
+      content: "Hello! I'm here to support you. What would you like to talk about today?",
       timestamp: new Date().toISOString(),
       language: selectedLanguage,
-    }]);
+    };
+
+    setMessages([welcomeMessage]);
     setConversationId(null);
     setError(null);
   };
@@ -357,16 +244,6 @@ const AIChat: React.FC = () => {
             />
           </div>
         </div>
-
-        {/* Translation Status */}
-        {isTranslating && (
-          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
-            <div className="flex items-center space-x-2">
-              <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-              <p className="text-blue-800 font-medium">{translate('translating_messages')}</p>
-            </div>
-          </div>
-        )}
 
         {/* Connection Status */}
         {connectionStatus === 'checking' && (
@@ -549,12 +426,12 @@ const AIChat: React.FC = () => {
                   className="w-full p-3 border border-neutral-300 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   rows={2}
                   maxLength={2000}
-                  disabled={isTyping || connectionStatus !== 'connected' || isTranslating}
+                  disabled={isTyping || connectionStatus !== 'connected'}
                 />
               </div>
               <Button
                 onClick={handleSendMessage}
-                disabled={!inputValue.trim() || isTyping || connectionStatus !== 'connected' || isTranslating}
+                disabled={!inputValue.trim() || isTyping || connectionStatus !== 'connected'}
                 className="h-12 w-12 p-0"
               >
                 <Send className="h-5 w-5" />
@@ -568,7 +445,7 @@ const AIChat: React.FC = () => {
                   <>
                     <span>•</span>
                     <Globe className="h-3 w-3" />
-                    <span>Translated via Lingo.dev</span>
+                    <span>UI translated via Lingo.dev</span>
                   </>
                 )}
               </div>
@@ -584,11 +461,6 @@ const AIChat: React.FC = () => {
         <div className="mt-6 text-center">
           <p className="text-sm text-neutral-500 max-w-2xl mx-auto">
             {translate('emergency_disclaimer')}
-            {selectedLanguage !== 'en' && (
-              <span className="block mt-1 text-xs">
-                {translate('translation_notice')}
-              </span>
-            )}
           </p>
         </div>
       </div>

@@ -1,17 +1,31 @@
-# MindCareAI - Full-Stack Mental Health Platform
+# MindCareAI - Production-Ready Mental Health Platform
 
-A comprehensive mental health platform with AI-powered therapy assistance, mood tracking, journaling, and professional therapy scheduling.
+A comprehensive mental health platform with AI-powered therapy assistance, multilingual UI support, mood tracking, journaling, and professional therapy scheduling.
 
-## Features
+## 🚀 Production Features
 
-- 🤖 **AI Therapy Assistant** - GPT-3.5 powered conversational therapy
+- 🤖 **AI Therapy Assistant** - GPT-3.5 Turbo powered conversational therapy
+- 🌍 **Multilingual UI** - 9 languages supported via Lingo.dev translation
 - 📊 **Mood Tracking** - Daily mood check-ins with analytics
 - 📝 **Personal Journal** - Secure journaling with writing prompts
 - 📅 **Therapy Scheduling** - Book sessions with licensed therapists
 - 📈 **Analytics Dashboard** - Track your mental health journey
 - 🔒 **Privacy First** - Secure and confidential
+- ⚡ **Serverless Architecture** - Netlify Functions for scalability
 
-## Tech Stack
+## 🌐 Supported Languages
+
+- English (en)
+- Français (fr)
+- Español (es)
+- Deutsch (de)
+- العربية (ar)
+- Kiswahili (sw)
+- Yorùbá (yo)
+- Hausa (ha)
+- Igbo (ig)
+
+## 🛠 Tech Stack
 
 ### Frontend
 - **React 18** with TypeScript
@@ -23,116 +37,142 @@ A comprehensive mental health platform with AI-powered therapy assistance, mood 
 ### Backend
 - **Netlify Functions** for serverless API
 - **OpenAI GPT-3.5 Turbo** for AI responses
+- **Lingo.dev** for UI translations
 - **Node.js** runtime
 
-## Getting Started
+## 🚀 Deployment to Netlify
 
 ### Prerequisites
-- Node.js 18+ 
+- Netlify account
 - OpenAI API key
+- Lingo.dev API key (included: `api_afm2rmz9pik2t8hojenooyda`)
 
-### Installation
+### Environment Variables
 
-1. Clone the repository
+Set these in your Netlify dashboard under Site Settings > Environment Variables:
+
 ```bash
-git clone <repository-url>
-cd mindcare-ai
-```
-
-2. Install dependencies
-```bash
-npm install
-```
-
-3. Set up environment variables
-```bash
-cp .env.example .env
-```
-
-Add your OpenAI API key to the `.env` file:
-```
+# Required for AI Chat
 OPENAI_API_KEY=your_openai_api_key_here
+
+# Required for UI Translations
+LINGO_API_KEY=api_afm2rmz9pik2t8hojenooyda
+
+# Optional
+NODE_ENV=production
 ```
 
-4. Start the development server
-```bash
-npm run dev
-```
+### Deployment Steps
 
-### Deployment
+1. **Connect Repository to Netlify**
+   ```bash
+   # Build settings
+   Build command: npm run build
+   Publish directory: dist
+   ```
 
-This project is configured for Netlify deployment:
+2. **Set Environment Variables**
+   - Go to Site Settings > Environment Variables
+   - Add `OPENAI_API_KEY` with your OpenAI API key
+   - Add `LINGO_API_KEY` with the provided Lingo.dev key
 
-1. Connect your repository to Netlify
-2. Set the environment variable `OPENAI_API_KEY` in Netlify dashboard
-3. Deploy!
+3. **Deploy**
+   - Push to your connected repository
+   - Netlify will automatically build and deploy
+   - Functions will be available at `/.netlify/functions/ai-chat`
 
-The Netlify function will be available at `/.netlify/functions/ai-chat`
+### Local Development
 
-## AI Chat Integration
+1. **Clone and Install**
+   ```bash
+   git clone <repository-url>
+   cd mindcare-ai
+   npm install
+   ```
 
-The AI chat uses a Netlify serverless function that:
-- Accepts POST requests to `/.netlify/functions/ai-chat`
-- Integrates with OpenAI GPT-3.5 Turbo
+2. **Environment Setup**
+   ```bash
+   cp .env.example .env
+   # Add your OPENAI_API_KEY to .env
+   ```
+
+3. **Start Development Server**
+   ```bash
+   npm run dev
+   ```
+
+4. **Test Netlify Functions Locally**
+   ```bash
+   npm run netlify:dev
+   ```
+
+## 🏗 Architecture
+
+### AI Chat Flow
+1. User types message in any language
+2. Message sent to `/.netlify/functions/ai-chat`
+3. GPT-3.5 Turbo processes and responds in same language
+4. Response displayed to user
+
+### UI Translation Flow
+1. User selects language from dropdown
+2. UI elements translated via Lingo.dev API
+3. Translations cached for performance
+4. Fallback to English if translation fails
+
+### Key Components
+- `AIChat.tsx` - Main chat interface
+- `uiTranslations.ts` - Translation service
+- `netlifyAiService.ts` - AI service integration
+- `LanguageSelector.tsx` - Language switching
+- `ai-chat.js` - Netlify function for AI
+
+## 🔧 Configuration
+
+### Netlify Function
+- Located in `netlify/functions/ai-chat.js`
+- Handles CORS automatically
+- Includes error handling and logging
+- Supports conversation history
+
+### Translation Service
+- Uses Lingo.dev API for UI translations only
+- Implements caching to reduce API calls
+- Graceful fallback to English
+- Batch translation for performance
+
+### AI Integration
+- Preserves full GPT-3.5 Turbo capabilities
 - Maintains conversation context
-- Provides trauma-informed mental health support
+- Supports all languages natively
+- No interference with AI responses
 
-### API Usage
+## 🛡 Security
 
-```javascript
-const response = await fetch("/.netlify/functions/ai-chat", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    message: "I'm feeling anxious today",
-    history: [
-      { role: "assistant", content: "Hello! How are you feeling?" },
-      { role: "user", content: "I've been stressed about work" }
-    ]
-  })
-});
+- API keys stored as environment variables
+- CORS properly configured
+- Input validation on all endpoints
+- Rate limiting considerations
+- No sensitive data in frontend
 
-const data = await response.json();
-console.log(data.reply); // AI response
+## 📊 Performance
+
+- Translation caching reduces API calls
+- Lazy loading of translations
+- Optimized bundle size
+- CDN delivery via Netlify
+- Serverless scaling
+
+## 🧪 Testing
+
+Test the AI chat function:
+```bash
+curl -X POST https://your-site.netlify.app/.netlify/functions/ai-chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Hello", "history": []}'
 ```
 
-## Environment Variables
-
-### Frontend (.env)
-- `VITE_OPENAI_PUBLIC_KEY` - For direct OpenAI calls (development only)
-
-### Netlify Functions
-- `OPENAI_API_KEY` - Your OpenAI API key (set in Netlify dashboard)
-
-## Project Structure
-
-```
-src/
-├── components/          # Reusable UI components
-├── pages/              # Page components
-├── services/           # API services
-├── utils/              # Utility functions
-└── routes/             # Route configuration
-
-netlify/
-└── functions/          # Serverless functions
-    └── ai-chat.js      # AI chat endpoint
-
-backend/                # Legacy backend (not used in production)
-```
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
-
-## License
-
-MIT License - see LICENSE file for details
-
-## Support
+## 🆘 Support
 
 If you're experiencing a mental health crisis, please contact:
 - Emergency Services: 911
@@ -140,3 +180,7 @@ If you're experiencing a mental health crisis, please contact:
 - Crisis Text Line: Text HOME to 741741
 
 This application is for supportive purposes only and is not a replacement for professional mental health care.
+
+## 📄 License
+
+MIT License - see LICENSE file for details
