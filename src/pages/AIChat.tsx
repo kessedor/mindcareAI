@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import Button from '../components/Button';
 import LanguageSelector from '../components/LanguageSelector';
 import { translationService, SupportedLanguage } from '../services/translationService';
+import { useUITranslations } from '../hooks/useUITranslations';
 
 // Choose your AI service:
 // import { aiChatService } from '../services/aiService'; // For direct OpenAI calls (exposes API key)
@@ -31,6 +32,26 @@ const AIChat: React.FC = () => {
   const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>('en');
   const [isTranslating, setIsTranslating] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Load UI translations for the selected language
+  const { translate, isLoading: translationsLoading } = useUITranslations(selectedLanguage, [
+    'ai_assistant',
+    'chat_title',
+    'chat_subtitle',
+    'chat_input_placeholder',
+    'chat_input_placeholder_multilingual',
+    'ai_thinking',
+    'new_conversation',
+    'connected_status',
+    'connecting_status',
+    'connection_failed',
+    'book_session',
+    'analytics',
+    'translating_messages',
+    'translation_notice',
+    'emergency_disclaimer',
+    'language'
+  ]);
 
   // Auto-scroll to bottom when new messages arrive
   const scrollToBottom = () => {
@@ -319,8 +340,10 @@ const AIChat: React.FC = () => {
               <Bot className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-display font-bold text-neutral-900">AI Therapy Assistant</h1>
-              <p className="text-neutral-600">Safe, confidential, and always available</p>
+              <h1 className="text-2xl font-display font-bold text-neutral-900">
+                {translate('chat_title')}
+              </h1>
+              <p className="text-neutral-600">{translate('chat_subtitle')}</p>
             </div>
           </div>
         </div>
@@ -340,7 +363,7 @@ const AIChat: React.FC = () => {
           <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
             <div className="flex items-center space-x-2">
               <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-              <p className="text-blue-800 font-medium">Translating messages...</p>
+              <p className="text-blue-800 font-medium">{translate('translating_messages')}</p>
             </div>
           </div>
         )}
@@ -348,14 +371,14 @@ const AIChat: React.FC = () => {
         {/* Connection Status */}
         {connectionStatus === 'checking' && (
           <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-            <p className="text-yellow-800 font-medium">Connecting to AI service...</p>
+            <p className="text-yellow-800 font-medium">{translate('connecting_status')}</p>
             <p className="text-yellow-700 text-sm mt-1">{debugInfo}</p>
           </div>
         )}
 
         {connectionStatus === 'error' && (
           <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4">
-            <p className="text-red-800 font-medium">Failed to connect to AI service</p>
+            <p className="text-red-800 font-medium">{translate('connection_failed')}</p>
             <p className="text-red-700 text-sm mt-1">{debugInfo}</p>
             <div className="mt-3 space-y-2">
               <p className="text-red-600 text-sm">Troubleshooting steps:</p>
@@ -378,7 +401,7 @@ const AIChat: React.FC = () => {
 
         {connectionStatus === 'connected' && (
           <div className="mb-6 bg-green-50 border border-green-200 rounded-xl p-4">
-            <p className="text-green-800 font-medium">✅ Connected to OpenAI GPT-3.5 Turbo</p>
+            <p className="text-green-800 font-medium">✅ {translate('connected_status')}</p>
             <p className="text-green-700 text-sm mt-1">{debugInfo}</p>
           </div>
         )}
@@ -388,13 +411,13 @@ const AIChat: React.FC = () => {
           <Link to="/schedule-therapy">
             <Button variant="outline" size="sm">
               <Calendar className="h-4 w-4 mr-2" />
-              Book Session
+              {translate('book_session')}
             </Button>
           </Link>
           <Link to="/chat-analytics">
             <Button variant="outline" size="sm">
               <BarChart3 className="h-4 w-4 mr-2" />
-              Analytics
+              {translate('analytics')}
             </Button>
           </Link>
         </div>
@@ -430,7 +453,7 @@ const AIChat: React.FC = () => {
                 className="text-neutral-600 hover:text-primary-600"
               >
                 <Plus className="h-4 w-4 mr-1" />
-                New
+                {translate('new_conversation')}
               </Button>
             </div>
           </div>
@@ -493,7 +516,7 @@ const AIChat: React.FC = () => {
                       <div className="w-2 h-2 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
                       <div className="w-2 h-2 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                     </div>
-                    <span className="text-sm text-neutral-600">AI is thinking...</span>
+                    <span className="text-sm text-neutral-600">{translate('ai_thinking')}</span>
                   </div>
                 </div>
               </div>
@@ -520,8 +543,8 @@ const AIChat: React.FC = () => {
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyPress={handleKeyPress}
                   placeholder={selectedLanguage === 'en' 
-                    ? "Share what's on your mind..." 
-                    : "Share what's on your mind... (type in your selected language)"
+                    ? translate('chat_input_placeholder')
+                    : translate('chat_input_placeholder_multilingual')
                   }
                   className="w-full p-3 border border-neutral-300 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   rows={2}
@@ -560,11 +583,10 @@ const AIChat: React.FC = () => {
         {/* Disclaimer */}
         <div className="mt-6 text-center">
           <p className="text-sm text-neutral-500 max-w-2xl mx-auto">
-            This AI assistant provides supportive guidance but is not a replacement for professional mental health care. 
-            If you're experiencing a crisis, please contact emergency services or a mental health professional immediately.
+            {translate('emergency_disclaimer')}
             {selectedLanguage !== 'en' && (
               <span className="block mt-1 text-xs">
-                Translation powered by Lingo.dev. Translations may not be perfect.
+                {translate('translation_notice')}
               </span>
             )}
           </p>

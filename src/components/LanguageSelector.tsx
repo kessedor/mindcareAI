@@ -1,23 +1,37 @@
 import React from 'react';
 import { Globe, ChevronDown } from 'lucide-react';
-import { SUPPORTED_LANGUAGES, SupportedLanguage } from '../services/translationService';
+import { SupportedLanguage } from '../lib/uiTranslations';
+
+export const SUPPORTED_LANGUAGES: Record<SupportedLanguage, string> = {
+  en: 'English',
+  fr: 'Français',
+  es: 'Español',
+  de: 'Deutsch',
+  ar: 'العربية',
+  sw: 'Kiswahili',
+  yo: 'Yorùbá',
+  ha: 'Hausa',
+  ig: 'Igbo'
+};
 
 interface LanguageSelectorProps {
   selectedLanguage: SupportedLanguage;
   onLanguageChange: (language: SupportedLanguage) => void;
   className?: string;
+  showLabel?: boolean;
 }
 
 const LanguageSelector: React.FC<LanguageSelectorProps> = ({
   selectedLanguage,
   onLanguageChange,
-  className = ''
+  className = '',
+  showLabel = true
 }) => {
   return (
     <div className={`relative ${className}`}>
       <div className="flex items-center space-x-2 text-sm text-neutral-600">
         <Globe className="h-4 w-4" />
-        <span>Language:</span>
+        {showLabel && <span>Language:</span>}
         <div className="relative">
           <select
             value={selectedLanguage}

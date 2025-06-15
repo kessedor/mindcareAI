@@ -2,19 +2,36 @@ import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Brain, Menu, X, Home, MessageCircle, BookOpen, Heart, BarChart3, Bot, Shield } from 'lucide-react';
 import Button from './Button';
+import LanguageSelector from './LanguageSelector';
+import { useUITranslations } from '../hooks/useUITranslations';
+import { SupportedLanguage } from '../lib/uiTranslations';
 
 const Navbar: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>('en');
   const location = useLocation();
 
+  // Load UI translations for navigation
+  const { translate } = useUITranslations(selectedLanguage, [
+    'home',
+    'dashboard',
+    'ai_assistant',
+    'ai_chat',
+    'journal',
+    'mood_tracker',
+    'admin',
+    'sign_in',
+    'get_started'
+  ]);
+
   const navigation = [
-    { name: 'Home', href: '/', icon: Home },
-    { name: 'Dashboard', href: '/dashboard', icon: BarChart3 },
-    { name: 'AI Assistant', href: '/ai-chat', icon: Bot },
-    { name: 'AI Chat', href: '/chat', icon: MessageCircle },
-    { name: 'Journal', href: '/journal', icon: BookOpen },
-    { name: 'Mood Tracker', href: '/mood', icon: Heart },
-    { name: 'Admin', href: '/admin', icon: Shield },
+    { name: translate('home'), href: '/', icon: Home },
+    { name: translate('dashboard'), href: '/dashboard', icon: BarChart3 },
+    { name: translate('ai_assistant'), href: '/ai-chat', icon: Bot },
+    { name: translate('ai_chat'), href: '/chat', icon: MessageCircle },
+    { name: translate('journal'), href: '/journal', icon: BookOpen },
+    { name: translate('mood_tracker'), href: '/mood', icon: Heart },
+    { name: translate('admin'), href: '/admin', icon: Shield },
   ];
 
   const isActive = (path: string) => location.pathname === path;
@@ -39,7 +56,7 @@ const Navbar: React.FC = () => {
               const Icon = item.icon;
               return (
                 <Link
-                  key={item.name}
+                  key={item.href}
                   to={item.href}
                   className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                     isActive(item.href)
@@ -56,11 +73,17 @@ const Navbar: React.FC = () => {
 
           {/* Desktop Actions */}
           <div className="hidden md:flex items-center space-x-4">
+            <LanguageSelector
+              selectedLanguage={selectedLanguage}
+              onLanguageChange={setSelectedLanguage}
+              showLabel={false}
+              className="mr-2"
+            />
             <Button variant="ghost" size="sm">
-              Sign In
+              {translate('sign_in')}
             </Button>
             <Button variant="primary" size="sm">
-              Get Started
+              {translate('get_started')}
             </Button>
           </div>
 
@@ -86,7 +109,7 @@ const Navbar: React.FC = () => {
                 const Icon = item.icon;
                 return (
                   <Link
-                    key={item.name}
+                    key={item.href}
                     to={item.href}
                     className={`flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
                       isActive(item.href)
@@ -102,11 +125,17 @@ const Navbar: React.FC = () => {
               })}
             </div>
             <div className="mt-4 pt-4 border-t border-neutral-200/50 space-y-2">
+              <div className="px-4 mb-3">
+                <LanguageSelector
+                  selectedLanguage={selectedLanguage}
+                  onLanguageChange={setSelectedLanguage}
+                />
+              </div>
               <Button variant="ghost" size="sm" className="w-full justify-center">
-                Sign In
+                {translate('sign_in')}
               </Button>
               <Button variant="primary" size="sm" className="w-full justify-center">
-                Get Started
+                {translate('get_started')}
               </Button>
             </div>
           </div>
